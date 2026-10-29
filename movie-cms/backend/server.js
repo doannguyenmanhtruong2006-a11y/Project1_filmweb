@@ -12,11 +12,13 @@ const authRoutes = require("./routes/auth");
 const movieRoutes = require("./routes/movies");
 const genreRoutes = require("./routes/genres");
 const episodeRoutes = require("./routes/episodes");
+const bookmarkRoutes = require("./routes/bookmarks");
 // Cắm đường ống Router vào app
 app.use("/", authRoutes);
 app.use("/", movieRoutes);
 app.use("/", genreRoutes);
 app.use("/", episodeRoutes);
+app.use("/", bookmarkRoutes);
 // API kiểm tra server
 app.get("/", (req, res) => {
   res.send("Backend Server Web Phim đang chạy!");

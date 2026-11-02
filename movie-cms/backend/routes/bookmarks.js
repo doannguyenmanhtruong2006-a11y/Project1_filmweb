@@ -10,12 +10,12 @@ const { verifyToken } = require("../middleware/auth");
 // API: POST /bookmarks
 router.post("/bookmarks", verifyToken, async (req, res) => {
     try {
-        const { userId, movieId } = req.body;
+        const { user_id, movie_id } = req.body;
 
         const newBookmark = await prisma.bookmarks.create({
             data: {
-                userId: parseInt(userId),
-                movieId: parseInt(movieId)
+                user_id: parseInt(user_id),
+                movie_id: parseInt(movie_id)
             }
         });
 
@@ -32,7 +32,7 @@ router.get("/users/:id/bookmarks", verifyToken, async (req, res) => {
         const userId = parseInt(req.params.id);
 
         const userBookmarks = await prisma.bookmarks.findMany({
-            where: { userId: userId }
+            where: { user_id: userId }
         });
 
         res.json(userBookmarks);

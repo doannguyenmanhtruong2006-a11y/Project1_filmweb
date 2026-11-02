@@ -12,9 +12,9 @@ router.get("/movies/:id/episodes", async (req, res) => {
     try {
         const movieId = parseInt(req.params.id);
 
-        // Tìm tất cả các tập phim có movieId trùng với ID truyền trên URL
+        // Tìm tất cả các tập phim có movie_id trùng với ID truyền trên URL
         const episodes = await prisma.episodes.findMany({
-            where: { movieId: movieId }
+            where: { movie_id: movieId }
         });
 
         res.json(episodes);
@@ -28,13 +28,13 @@ router.get("/movies/:id/episodes", async (req, res) => {
 router.post("/episodes", verifyToken, verifyAdmin, async (req, res) => {
     try {
         // Lấy thông tin tập phim từ Body do Admin gửi lên
-        const { title, video_url, movieId } = req.body;
+        const { episode_number, video_url, movie_id } = req.body;
 
         const newEpisode = await prisma.episodes.create({
             data: {
-                title: title,
+                episode_number: parseInt(episode_number),
                 video_url: video_url,
-                movieId: parseInt(movieId) // Bắt buộc phải có để biết tập này thuộc phim nào
+                movie_id: parseInt(movie_id) // Bắt buộc phải có để biết tập này thuộc phim nào
             }
         });
 

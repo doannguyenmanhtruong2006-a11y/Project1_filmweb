@@ -67,4 +67,25 @@ router.delete("/movies/:id", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// Gán thể loại cho phim (Chỉ Admin)
+// API: POST /movies/:id/genres
+router.post("/movies/:id/genres", verifyToken, verifyAdmin, async (req, res) => {
+  try {
+    const movieId = parseInt(req.params.id);
+    const { genreId } = req.body; // Client gửi lên genreId (camelCase)
+
+    // Lưu vào bảng trung gian với chuẩn snake_case của CSDL
+    const newMovieGenre = await prisma.movie_genres.create({
+      data: {
+        movie_id: movieId,
+        genre_id: parseInt(genreId)
+      }
+    });
+
+    res.status(201).json({ message: "Đã gán thể loại thành công", data: newMovieGenre });
+  } catch (error) {
+    res.status(500).json({ error: "Lỗi khi gán thể loại cho phim" });
+  }
+});
+
 module.exports = router;

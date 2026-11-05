@@ -2,7 +2,7 @@ const { PrismaClient } = require("@prisma/client");
 const axios = require("axios");
 
 const prisma = new PrismaClient();
-const TMDB_API_KEY = "bf1b591e44900730133654df4682fd2e"; // Thay API Key của bạn vào đây
+const TMDB_API_KEY = "bf1b591e44900730133654df4682fd2e"; //  API Key của bạn 
 const BASE_URL = "https://api.themoviedb.org/3";
 
 async function crawlData() {

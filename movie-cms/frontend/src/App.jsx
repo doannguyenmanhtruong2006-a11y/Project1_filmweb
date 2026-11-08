@@ -4,13 +4,30 @@ import axios from "axios";
 function App() {
   const [movies, setMovies] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Lấy 6 phim đầu tiên có ảnh làm slideshow banner
+  const featuredMovies = movies.filter((m) => m.poster_url || m.thumbnail_url).slice(1, 7);
+
+  // Chuyển ảnh sang độ phân giải cao cho banner (w500 → original)
+  const getHiResImage = (url) => {
+    if (!url) return "";
+    return url.replace("/w500/", "/original/");
+  };
+
+  // Phim đang hiển thị trên banner
+  const heroMovie = featuredMovies[currentSlide] || null;
 
   // Gọi API backend lấy danh sách phim khi component được mount
   useEffect(() => {
     axios
       .get("http://localhost:5000/movies")
       .then((res) => {
-        setMovies(res.data);
+        // Lọc trùng lặp theo tiêu đề phim để đảm bảo an toàn
+        const uniqueMovies = Array.from(
+          new Map(res.data.map((m) => [m.title, m])).values()
+        );
+        setMovies(uniqueMovies);
         setLoading(false);
       })
       .catch((err) => {
@@ -18,6 +35,17 @@ function App() {
         setLoading(false);
       });
   }, []);
+
+  // Tự động đổi banner mỗi 4 giây
+  useEffect(() => {
+    if (featuredMovies.length <= 1) return;
+
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % featuredMovies.length);
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [featuredMovies.length]);
 
   return (
     <div className="min-h-screen bg-[#141414] text-white">
@@ -38,22 +66,37 @@ function App() {
         </div>
       </nav>
 
-      {/* ===== HERO BANNER ===== */}
-      <section className="relative h-[70vh] flex items-end pb-16 px-6 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent">
-        {movies.length > 0 && (movies[0].poster_url || movies[0].thumbnail_url) && (
+      {/* ===== HERO BANNER SLIDESHOW ===== */}
+      <section className="relative h-[70vh] flex items-end pb-16 px-6 overflow-hidden">
+        {/* Tất cả ảnh nền xếp chồng, chỉ ảnh hiện tại có opacity-100 */}
+        {featuredMovies.map((movie, index) => (
           <img
-            src={movies[0].poster_url || movies[0].thumbnail_url}
-            alt={movies[0].title}
-            className="absolute inset-0 w-full h-full object-cover -z-10 opacity-40"
+            key={movie.id}
+            src={getHiResImage(movie.poster_url || movie.thumbnail_url)}
+            alt={movie.title}
+            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-1000 ease-in-out ${index === currentSlide ? "opacity-100" : "opacity-0"
+              }`}
           />
-        )}
-        <div className="max-w-2xl">
-          <h2 className="text-5xl font-extrabold mb-4 drop-shadow-lg">
-            {movies.length > 0 ? movies[0].title : "Chào mừng đến FILMWEB"}
+        ))}
+
+        {/* Gradient overlay để text đọc được */}
+        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/80 to-transparent" />
+
+        {/* Nội dung text */}
+        <div className="relative max-w-2xl z-10">
+          <h2
+            key={heroMovie?.id}
+            className="text-5xl font-extrabold mb-4 drop-shadow-lg animate-fadeIn"
+          >
+            {heroMovie ? heroMovie.title : "Chào mừng đến FILMWEB"}
           </h2>
-          <p className="text-gray-300 text-lg mb-6 line-clamp-3">
-            {movies.length > 0
-              ? movies[0].description
+          <p
+            key={`desc-${heroMovie?.id}`}
+            className="text-gray-300 text-lg mb-6 line-clamp-3 animate-fadeIn"
+          >
+            {heroMovie
+              ? heroMovie.description
               : "Khám phá kho phim khổng lồ với hàng trăm bộ phim hấp dẫn."}
           </p>
           <div className="flex gap-3">
@@ -64,6 +107,22 @@ function App() {
               ℹ Thông tin thêm
             </button>
           </div>
+
+          {/* Chấm chỉ slide hiện tại */}
+          {featuredMovies.length > 1 && (
+            <div className="flex gap-2 mt-6">
+              {featuredMovies.map((_, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentSlide(index)}
+                  className={`h-1 rounded-full transition-all duration-300 ${index === currentSlide
+                      ? "w-8 bg-red-500"
+                      : "w-4 bg-gray-500 hover:bg-gray-400"
+                    }`}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </section>
 

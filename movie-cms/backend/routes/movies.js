@@ -16,13 +16,28 @@ router.get("/movies", async (req, res) => {
   }
 });
 
-// 2. API: Lấy chi tiết 1 bộ phim (Mở cửa tự do)
+// 2. API: Lấy chi tiết 1 bộ phim (Kèm danh sách thể loại)
 router.get("/movies/:id", async (req, res) => {
   try {
     const movieId = parseInt(req.params.id);
-    const movie = await prisma.movies.findUnique({ where: { id: movieId } });
+    const movie = await prisma.movies.findUnique({
+      where: { id: movieId },
+      include: {
+        movie_genres: {
+          include: {
+            genres: true,
+          },
+        },
+      },
+    });
     if (!movie) return res.status(404).json({ error: "Không tìm thấy phim" });
-    res.json(movie);
+
+    // Trích xuất danh sách thể loại sạch đẹp cho frontend
+    const formattedMovie = {
+      ...movie,
+      genres: movie.movie_genres?.map((mg) => mg.genres) || [],
+    };
+    res.json(formattedMovie);
   } catch (error) {
     res.status(500).json({ error: "Lỗi hệ thống" });
   }
@@ -31,9 +46,9 @@ router.get("/movies/:id", async (req, res) => {
 // 3. API: Thêm phim mới (Phải là Admin)
 router.post("/movies", verifyToken, verifyAdmin, async (req, res) => {
   try {
-    const { title, description, release_year, thumbnail_url } = req.body;
+    const { title, description, release_year, thumbnail_url, imdb_score, age_rating, duration_min, director, country } = req.body;
     const newMovie = await prisma.movies.create({
-      data: { title, description, release_year, thumbnail_url },
+      data: { title, description, release_year, thumbnail_url, imdb_score, age_rating, duration_min, director, country },
     });
     res.status(201).json(newMovie);
   } catch (error) {
@@ -45,10 +60,10 @@ router.post("/movies", verifyToken, verifyAdmin, async (req, res) => {
 router.put("/movies/:id", verifyToken, verifyAdmin, async (req, res) => {
   try {
     const movieId = parseInt(req.params.id);
-    const { title, description, release_year, thumbnail_url } = req.body;
+    const { title, description, release_year, thumbnail_url, imdb_score, age_rating, duration_min, director, country } = req.body;
     const updatedMovie = await prisma.movies.update({
       where: { id: movieId },
-      data: { title, description, release_year, thumbnail_url },
+      data: { title, description, release_year, thumbnail_url, imdb_score, age_rating, duration_min, director, country },
     });
     res.json(updatedMovie);
   } catch (error) {
@@ -78,8 +93,8 @@ router.post("/movies/:id/genres", verifyToken, verifyAdmin, async (req, res) => 
     const newMovieGenre = await prisma.movie_genres.create({
       data: {
         movie_id: movieId,
-        genre_id: parseInt(genreId)
-      }
+        genre_id: parseInt(genreId),
+      },
     });
 
     res.status(201).json({ message: "Đã gán thể loại thành công", data: newMovieGenre });

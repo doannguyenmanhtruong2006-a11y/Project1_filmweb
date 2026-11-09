@@ -134,25 +134,41 @@ function MovieDetail() {
             <div className="flex flex-wrap items-center gap-2 mb-3">
               {/* Điểm IMDb */}
               <span className="flex items-center gap-1 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 text-sm font-bold px-3 py-1 rounded-md">
-                ⭐ IMDb {movie.imdb_rating ?? "8.5"}
+                ⭐ IMDb {movie.imdb_score ?? movie.imdb_rating ?? "8.5"}
               </span>
 
-              {/* Nhãn phân loại */}
+              {/* Nhãn phân loại độ tuổi */}
               <span className="bg-zinc-700 border border-zinc-500 text-gray-200 text-sm font-bold px-3 py-1 rounded-md tracking-wide">
-                {movie.rating_label ?? "P"}
+                {movie.age_rating ?? movie.rating_label ?? "P"}
               </span>
 
               {/* Năm phát hành */}
               {movie.release_year && (
                 <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
-                  {movie.release_year}
+                  📅 {movie.release_year}
                 </span>
               )}
 
               {/* Thời lượng */}
-              <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
-                🕐 {movie.duration ?? "2h 32m"}
-              </span>
+              {(movie.duration_min || movie.duration) && (
+                <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
+                  🕐 {movie.duration_min ? `${movie.duration_min} phút` : movie.duration}
+                </span>
+              )}
+
+              {/* Quốc gia */}
+              {movie.country && (
+                <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
+                  🌍 {movie.country}
+                </span>
+              )}
+
+              {/* Đạo diễn */}
+              {movie.director && (
+                <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
+                  🎬 ĐD: {movie.director}
+                </span>
+              )}
 
               {/* Lượt xem */}
               {movie.view_count !== undefined && (
@@ -164,7 +180,7 @@ function MovieDetail() {
               {/* Số tập (nếu có) */}
               {episodes.length > 0 && (
                 <span className="bg-red-600/20 border border-red-500/40 text-red-400 text-sm font-semibold px-3 py-1 rounded-md">
-                  🎬 {episodes.length} tập
+                  🎞 {episodes.length} tập
                 </span>
               )}
             </div>

@@ -49,6 +49,11 @@ model movies {
   bookmarks     bookmarks[]
   episodes      episodes[]
   movie_genres  movie_genres[]
+  imdb_score    Float?
+  age_rating    String?   @db.VarChar(10)
+  duration_min  Int?
+  director      String?   @db.VarChar(100)
+  country       String?   @db.VarChar(50)
 }
 
 model users {

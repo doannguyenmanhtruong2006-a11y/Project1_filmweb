@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import MovieDetail from './pages/MovieDetail';
+import AdminPage from './pages/AdminPage';
 
 function App() {
   return (
@@ -13,7 +14,7 @@ function App() {
         <Route path="/movie/:id" element={<MovieDetail />} />
 
         {/* Các trang sẽ làm tiếp */}
-        <Route path="/admin" element={<div className="text-white p-10">Trang Quản trị Admin (Đang xây dựng)</div>} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="/login" element={<div className="text-white p-10">Trang Đăng nhập (Đang xây dựng)</div>} />
       </Routes>
     </BrowserRouter>

@@ -79,6 +79,9 @@ function MovieDetail() {
     movie.thumbnail_url ||
     "https://via.placeholder.com/400x600?text=No+Image";
 
+  // Ảnh độ phân giải cao cho background
+  const backdropUrl = posterUrl.replace("/w500/", "/original/");
+
   return (
     <div className="min-h-screen bg-[#141414] text-white">
       {/* ===== NAVBAR ===== */}
@@ -99,19 +102,18 @@ function MovieDetail() {
 
       {/* ===== HERO BANNER ===== */}
       <section className="relative h-[55vh] overflow-hidden">
-        {/* Ảnh nền mờ — phóng to và làm mờ để tạo chiều sâu */}
+        {/* Ảnh nền sắc nét kết hợp làm mờ và tối để tôn phần thông tin */}
         <img
-          src={posterUrl}
+          src={backdropUrl}
           alt={movie.title}
-          className="absolute inset-0 w-full h-full object-cover scale-110 blur-sm opacity-30"
+          className="absolute inset-0 w-full h-full object-cover scale-105 blur-sm opacity-30"
         />
         {/* Gradient phủ lên ảnh nền */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/50 to-black/40" />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/60 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#141414] via-[#141414]/60 to-black/40" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#141414]/80 to-transparent" />
       </section>
 
       {/* ===== KHU VỰC THÔNG TIN CHÍNH ===== */}
-      {/* Kéo lên đè lên Banner bằng margin âm */}
       <section className="relative z-10 max-w-6xl mx-auto px-6 -mt-48">
         <div className="flex flex-col md:flex-row gap-8 items-start">
           {/* ---- POSTER NHỎ BÊN TRÁI ---- */}
@@ -119,7 +121,7 @@ function MovieDetail() {
             <img
               src={posterUrl}
               alt={movie.title}
-              className="w-full rounded-xl shadow-2xl shadow-black/70 ring-2 ring-white/10"
+              className="w-full rounded-xl shadow-2xl shadow-black/80 ring-2 ring-white/10 aspect-[2/3] object-cover"
             />
           </div>
 
@@ -130,40 +132,44 @@ function MovieDetail() {
               {movie.title}
             </h1>
 
-            {/* ===== HÀNG 1: Badge thông tin nhanh ===== */}
+            {/* ===== HÀNG 1: Badge thông số thật từ Database ===== */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
-              {/* Điểm IMDb */}
-              <span className="flex items-center gap-1 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 text-sm font-bold px-3 py-1 rounded-md">
-                ⭐ IMDb {movie.imdb_score ?? movie.imdb_rating ?? "8.5"}
-              </span>
+              {/* Điểm IMDb thật */}
+              {movie.imdb_score && (
+                <span className="flex items-center gap-1 bg-yellow-400/20 border border-yellow-400/50 text-yellow-400 text-sm font-bold px-3 py-1 rounded-md">
+                  ⭐ IMDb {movie.imdb_score}
+                </span>
+              )}
 
-              {/* Nhãn phân loại độ tuổi */}
-              <span className="bg-zinc-700 border border-zinc-500 text-gray-200 text-sm font-bold px-3 py-1 rounded-md tracking-wide">
-                {movie.age_rating ?? movie.rating_label ?? "P"}
-              </span>
+              {/* Nhãn phân loại độ tuổi thật */}
+              {movie.age_rating && (
+                <span className="bg-zinc-700/80 border border-zinc-500 text-gray-200 text-sm font-bold px-3 py-1 rounded-md tracking-wide">
+                  {movie.age_rating}
+                </span>
+              )}
 
-              {/* Năm phát hành */}
+              {/* Năm phát hành thật */}
               {movie.release_year && (
                 <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
                   📅 {movie.release_year}
                 </span>
               )}
 
-              {/* Thời lượng */}
-              {(movie.duration_min || movie.duration) && (
+              {/* Thời lượng thật */}
+              {movie.duration_min && (
                 <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
-                  🕐 {movie.duration_min ? `${movie.duration_min} phút` : movie.duration}
+                  🕐 {movie.duration_min} phút
                 </span>
               )}
 
-              {/* Quốc gia */}
+              {/* Quốc gia thật */}
               {movie.country && (
                 <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
                   🌍 {movie.country}
                 </span>
               )}
 
-              {/* Đạo diễn */}
+              {/* Đạo diễn thật */}
               {movie.director && (
                 <span className="bg-zinc-800 border border-zinc-600 text-gray-300 text-sm font-semibold px-3 py-1 rounded-md">
                   🎬 ĐD: {movie.director}
@@ -177,7 +183,7 @@ function MovieDetail() {
                 </span>
               )}
 
-              {/* Số tập (nếu có) */}
+              {/* Số tập */}
               {episodes.length > 0 && (
                 <span className="bg-red-600/20 border border-red-500/40 text-red-400 text-sm font-semibold px-3 py-1 rounded-md">
                   🎞 {episodes.length} tập
@@ -185,31 +191,25 @@ function MovieDetail() {
               )}
             </div>
 
-            {/* ===== HÀNG 2: Nút Thể loại ===== */}
-            <div className="flex flex-wrap items-center gap-2 mb-6">
-              {/* Nếu movie có genres thì map, tạm thời hardcode mẫu */}
-              {(movie.genres && movie.genres.length > 0
-                ? movie.genres
-                : [
-                    { id: 1, name: "Hành động" },
-                    { id: 2, name: "Khoa học viễn tưởng" },
-                    { id: 3, name: "Kinh dị" },
-                  ]
-              ).map((genre) => (
-                <button
-                  key={genre.id}
-                  className="bg-zinc-900 hover:bg-red-600/20 border border-zinc-600 hover:border-red-500/60
-                             text-gray-300 hover:text-red-400 text-sm font-medium px-4 py-1.5 rounded-full
-                             transition-all duration-200"
-                >
-                  {genre.name}
-                </button>
-              ))}
-            </div>
+            {/* ===== HÀNG 2: Thể loại thật từ Database ===== */}
+            {movie.genres && movie.genres.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-6">
+                {movie.genres.map((genre) => (
+                  <span
+                    key={genre.id}
+                    className="bg-zinc-900 hover:bg-red-600/20 border border-zinc-700 hover:border-red-500/50
+                               text-gray-300 hover:text-red-400 text-xs font-semibold px-3.5 py-1.5 rounded-full
+                               transition-colors cursor-default"
+                  >
+                    {genre.name}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Nút hành động */}
             <div className="flex flex-wrap gap-3">
-              {/* Nút Xem Trailer — nổi bật nhất */}
+              {/* Nút Xem Trailer */}
               <button
                 onClick={() => setShowTrailer(true)}
                 className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-bold px-7 py-3 rounded-lg transition-all hover:scale-105 shadow-lg shadow-red-600/30 text-base"

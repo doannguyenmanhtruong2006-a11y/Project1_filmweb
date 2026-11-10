@@ -6,11 +6,26 @@ const prisma = new PrismaClient();
 // Gọi 2 bác bảo vệ từ bốt gác vào
 const { verifyToken, verifyAdmin } = require("../middleware/auth");
 
-// 1. API: Lấy danh sách toàn bộ phim (Mở cửa tự do)
+// 1. API: Lấy danh sách toàn bộ phim (Mở cửa tự do - Kèm thể loại)
 router.get("/movies", async (req, res) => {
   try {
-    const allMovies = await prisma.movies.findMany();
-    res.json(allMovies);
+    const allMovies = await prisma.movies.findMany({
+      orderBy: { id: "desc" },
+      include: {
+        movie_genres: {
+          include: {
+            genres: true,
+          },
+        },
+      },
+    });
+
+    const formattedMovies = allMovies.map((m) => ({
+      ...m,
+      genres: m.movie_genres?.map((mg) => mg.genres) || [],
+    }));
+
+    res.json(formattedMovies);
   } catch (error) {
     res.status(500).json({ error: "Lỗi hệ thống khi lấy dữ liệu phim" });
   }

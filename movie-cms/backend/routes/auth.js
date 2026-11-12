@@ -48,7 +48,16 @@ router.post("/login", async (req, res) => {
       "CHIA_KHOA_BI_MAT",
       { expiresIn: "2h" },
     );
-    res.json({ message: "Đăng nhập thành công", token: token });
+    res.json({
+      message: "Đăng nhập thành công",
+      token: token,
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role,
+      },
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Lỗi hệ thống khi đăng nhập" });

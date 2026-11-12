@@ -1,13 +1,24 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 function AdminPage() {
+  const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState("movies");
   const [moviesList, setMoviesList] = useState([]);
   const [genresList, setGenresList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Thông tin Admin đăng nhập
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
 
   // Bộ lọc & Tìm kiếm
   const [searchTerm, setSearchTerm] = useState("");
@@ -251,19 +262,27 @@ function AdminPage() {
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-xs">
-                  TD
+                  {currentUser?.username
+                    ? currentUser.username.slice(0, 2).toUpperCase()
+                    : "AD"}
                 </div>
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-[#16161c] rounded-full"></span>
               </div>
-              <div>
-                <p className="text-xs font-bold text-white">Truong Doan</p>
-                <p className="text-[10px] text-zinc-400">truong@gmail.com</p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white truncate max-w-[110px]">
+                  {currentUser?.username || "Admin"}
+                </p>
+                <p className="text-[10px] text-zinc-400 truncate max-w-[110px]">
+                  {currentUser?.email || "admin@filmweb.vn"}
+                </p>
               </div>
             </div>
             <button
               onClick={() => {
                 localStorage.removeItem("token");
+                localStorage.removeItem("user");
                 alert("Đã đăng xuất phiên làm việc!");
+                navigate("/login");
               }}
               title="Đăng xuất"
               className="p-1.5 text-zinc-500 hover:text-red-400 rounded-lg hover:bg-zinc-800 transition-colors"

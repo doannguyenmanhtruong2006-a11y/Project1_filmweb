@@ -2,11 +2,15 @@ const jwt = require("jsonwebtoken");
 
 // Bác bảo vệ 1: Kiểm tra xem có thẻ Token không
 const verifyToken = (req, res, next) => {
-  const token = req.header("Authorization");
+  let token = req.header("Authorization");
   if (!token)
     return res
       .status(401)
       .json({ error: "Từ chối truy cập! Bạn chưa đăng nhập." });
+
+  if (token.startsWith("Bearer ")) {
+    token = token.slice(7).trim();
+  }
 
   try {
     const verified = jwt.verify(token, "CHIA_KHOA_BI_MAT");

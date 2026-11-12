@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import HomePage from './pages/HomePage';
 import MovieDetail from './pages/MovieDetail';
 import AdminPage from './pages/AdminPage';
+import LoginPage from './pages/LoginPage';
 
 function App() {
   return (
@@ -13,9 +14,11 @@ function App() {
         {/* Trang chi tiết phim */}
         <Route path="/movie/:id" element={<MovieDetail />} />
 
-        {/* Các trang sẽ làm tiếp */}
+        {/* Trang quản trị  */}
         <Route path="/admin" element={<AdminPage />} />
-        <Route path="/login" element={<div className="text-white p-10">Trang Đăng nhập (Đang xây dựng)</div>} />
+
+        {/* Trang đăng nhập */}
+        <Route path="/login" element={<LoginPage />} />
       </Routes>
     </BrowserRouter>
   );

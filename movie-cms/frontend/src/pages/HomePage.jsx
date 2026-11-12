@@ -8,6 +8,23 @@ function HomePage() {
     const [currentSlide, setCurrentSlide] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
 
+    // Trạng thái người dùng đã đăng nhập (lấy từ localStorage)
+    const [currentUser, setCurrentUser] = useState(() => {
+        try {
+            const saved = localStorage.getItem("user");
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
+
+    // Xử lý Đăng xuất
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        setCurrentUser(null);
+    };
+
     // Lấy 6 phim đầu tiên có ảnh làm slideshow banner
     const featuredMovies = movies
         .filter((m) => m.poster_url || m.thumbnail_url)
@@ -84,9 +101,43 @@ function HomePage() {
                         placeholder="Tìm kiếm phim..."
                         className="bg-black/60 border border-gray-600 rounded px-4 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-red-500 transition-colors w-64"
                     />
-                    <button className="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-5 py-2 rounded transition-colors">
-                        Đăng nhập
-                    </button>
+
+                    {currentUser ? (
+                        <div className="flex items-center gap-3">
+                            {currentUser.role === "ADMIN" && (
+                                <Link
+                                    to="/admin"
+                                    className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                                >
+                                    <span>⚙️ Quản trị</span>
+                                </Link>
+                            )}
+
+                            <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/60 px-3 py-1 rounded-full">
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px]">
+                                    {currentUser.username ? currentUser.username.slice(0, 2).toUpperCase() : "U"}
+                                </div>
+                                <span className="text-xs font-semibold text-zinc-200 max-w-[110px] truncate">
+                                    {currentUser.username || currentUser.email}
+                                </span>
+                            </div>
+
+                            <button
+                                onClick={handleLogout}
+                                title="Đăng xuất"
+                                className="text-xs text-zinc-400 hover:text-red-400 font-semibold px-2 py-1.5 transition-colors"
+                            >
+                                Đăng xuất
+                            </button>
+                        </div>
+                    ) : (
+                        <Link
+                            to="/login"
+                            className="bg-red-600 hover:bg-red-700 text-white text-sm font-semibold px-5 py-2 rounded transition-colors"
+                        >
+                            Đăng nhập
+                        </Link>
+                    )}
                 </div>
             </nav>
 

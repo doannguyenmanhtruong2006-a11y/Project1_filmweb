@@ -13,6 +13,22 @@ function MovieDetail() {
   const [showTrailer, setShowTrailer] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
 
+  // Trạng thái người dùng đã đăng nhập (lấy từ localStorage)
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem("user");
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setCurrentUser(null);
+  };
+
   // Gọi song song 2 API cùng lúc: chi tiết phim + danh sách tập
   useEffect(() => {
     setLoading(true);
@@ -86,18 +102,67 @@ function MovieDetail() {
     <div className="min-h-screen bg-[#141414] text-white">
       {/* ===== NAVBAR ===== */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/90 to-transparent px-6 py-4 flex items-center justify-between">
-        <Link
-          to="/"
-          className="text-3xl font-extrabold tracking-wider text-red-600 hover:text-red-500 transition-colors"
-        >
-          FILMWEB
-        </Link>
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-2 text-gray-300 hover:text-white text-sm font-semibold bg-white/10 hover:bg-white/20 px-4 py-2 rounded-full transition-colors"
-        >
-          ← Trang chủ
-        </button>
+        <div className="flex items-center gap-4">
+          <Link
+            to="/"
+            className="text-3xl font-extrabold tracking-wider text-red-600 hover:text-red-500 transition-colors"
+          >
+            FILMWEB
+          </Link>
+          <button
+            onClick={() => navigate("/")}
+            className="hidden sm:flex items-center gap-2 text-gray-300 hover:text-white text-xs font-semibold bg-white/10 hover:bg-white/20 px-3.5 py-1.5 rounded-full transition-colors"
+          >
+            ← Trang chủ
+          </button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {currentUser ? (
+            <div className="flex items-center gap-3">
+              {currentUser.role === "ADMIN" && (
+                <Link
+                  to="/admin"
+                  className="bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                >
+                  <span>⚙️ Quản trị</span>
+                </Link>
+              )}
+
+              <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/60 px-3 py-1 rounded-full">
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px]">
+                  {currentUser.username ? currentUser.username.slice(0, 2).toUpperCase() : "U"}
+                </div>
+                <span className="text-xs font-semibold text-zinc-200 max-w-[110px] truncate">
+                  {currentUser.username || currentUser.email}
+                </span>
+              </div>
+
+              <button
+                onClick={handleLogout}
+                title="Đăng xuất"
+                className="text-xs text-zinc-400 hover:text-red-400 font-semibold px-2 py-1.5 transition-colors"
+              >
+                Đăng xuất
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate("/")}
+                className="sm:hidden flex items-center gap-1 text-gray-300 hover:text-white text-xs font-semibold bg-white/10 px-3 py-1.5 rounded-full"
+              >
+                ← Về chủ
+              </button>
+              <Link
+                to="/login"
+                className="bg-red-600 hover:bg-red-700 text-white text-xs sm:text-sm font-semibold px-4 py-1.5 rounded transition-colors"
+              >
+                Đăng nhập
+              </Link>
+            </div>
+          )}
+        </div>
       </nav>
 
       {/* ===== HERO BANNER ===== */}

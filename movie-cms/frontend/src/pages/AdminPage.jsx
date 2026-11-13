@@ -51,8 +51,28 @@ function AdminPage() {
   };
 
   useEffect(() => {
+    // Lớp bảo vệ bổ sung trực tiếp trong AdminPage
+    const token = localStorage.getItem("token");
+    const savedUser = localStorage.getItem("user");
+
+    if (!token || !savedUser) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const user = JSON.parse(savedUser);
+      if (user.role !== "ADMIN") {
+        navigate("/");
+        return;
+      }
+    } catch {
+      navigate("/login");
+      return;
+    }
+
     fetchData();
-  }, []);
+  }, [navigate]);
 
   // Xóa 1 phim qua API Backend
   const handleDeleteMovie = async (id, title) => {

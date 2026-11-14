@@ -46,7 +46,7 @@ router.post("/login", async (req, res) => {
     const token = jwt.sign(
       { userId: user.id, role: user.role },
       "CHIA_KHOA_BI_MAT",
-      { expiresIn: "2h" },
+      { expiresIn: "7d" }, // Tăng thời hạn Token lên 7 ngày để thoải mái làm đồ án / test
     );
     res.json({
       message: "Đăng nhập thành công",

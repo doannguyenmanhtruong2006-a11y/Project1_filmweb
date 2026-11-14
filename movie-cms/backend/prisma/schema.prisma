@@ -27,6 +27,8 @@ model episodes {
 model genres {
   id           Int            @id @default(autoincrement())
   name         String         @db.VarChar(255)
+  is_deleted   Boolean?       @default(false)
+  deleted_at   DateTime?
   movie_genres movie_genres[]
 }
 
@@ -54,6 +56,8 @@ model movies {
   duration_min  Int?
   director      String?   @db.VarChar(100)
   country       String?   @db.VarChar(50)
+  is_deleted    Boolean?  @default(false)
+  deleted_at    DateTime?
 }
 
 model users {

@@ -39,6 +39,13 @@ router.post("/login", async (req, res) => {
     const user = await prisma.users.findUnique({ where: { email: email } });
     if (!user) return res.status(404).json({ error: "Email không tồn tại" });
 
+    // Kiểm tra tài khoản đã bị xóa mềm vào thùng rác chưa
+    if (user.is_deleted) {
+      return res.status(403).json({
+        error: "Tài khoản của bạn đã bị tạm khóa hoặc chuyển vào thùng rác. Vui lòng liên hệ Quản trị viên!",
+      });
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid)
       return res.status(401).json({ error: "Mật khẩu không chính xác" });

@@ -21,7 +21,7 @@ function AdminPage() {
   });
 
   // Quản lý Thùng rác (Trash Bin)
-  const [trashTab, setTrashTab] = useState("movies"); // "movies" | "genres"
+  const [trashTab, setTrashTab] = useState("movies"); // "movies" | "genres" | "users"
   const [trashList, setTrashList] = useState([]);
   const [selectedTrash, setSelectedTrash] = useState([]);
   const [trashSearchTerm, setTrashSearchTerm] = useState("");
@@ -32,6 +32,29 @@ function AdminPage() {
   const [selectedTrashGenres, setSelectedTrashGenres] = useState([]);
   const [trashGenreSearchTerm, setTrashGenreSearchTerm] = useState("");
   const [trashGenreCurrentPage, setTrashGenreCurrentPage] = useState(1);
+
+  // Thùng rác Người dùng (Users Trash)
+  const [trashUsersList, setTrashUsersList] = useState([]);
+  const [selectedTrashUsers, setSelectedTrashUsers] = useState([]);
+  const [trashUserSearchTerm, setTrashUserSearchTerm] = useState("");
+  const [trashUserCurrentPage, setTrashUserCurrentPage] = useState(1);
+
+  // Quản lý Người dùng (Users Management)
+  const [usersList, setUsersList] = useState([]);
+  const [userSearchTerm, setUserSearchTerm] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("all"); // "all" | "ADMIN" | "USER"
+  const [userCurrentPage, setUserCurrentPage] = useState(1);
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+  const [userModalMode, setUserModalMode] = useState("create"); // "create" | "edit"
+  const [editingUser, setEditingUser] = useState(null);
+  const [userFormData, setUserFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+    role: "USER",
+  });
+  const [userFormLoading, setUserFormLoading] = useState(false);
+  const [userModalError, setUserModalError] = useState("");
 
   // Bộ lọc & Tìm kiếm
   const [searchTerm, setSearchTerm] = useState("");
@@ -298,7 +321,7 @@ function AdminPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
-  // Gọi API lấy dữ liệu thật từ Backend (bao gồm cả Thùng rác Phim & Thể loại)
+  // Gọi API lấy dữ liệu thật từ Backend (Phim, Thể loại, Người dùng & Thùng rác)
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -306,17 +329,21 @@ function AdminPage() {
       const token = localStorage.getItem("token");
       const config = token ? { headers: { Authorization: token } } : {};
 
-      const [moviesRes, genresRes, trashRes, trashGenresRes] = await Promise.all([
+      const [moviesRes, genresRes, usersRes, trashRes, trashGenresRes, trashUsersRes] = await Promise.all([
         axios.get("http://localhost:5000/movies"),
         axios.get("http://localhost:5000/genres"),
+        axios.get("http://localhost:5000/users", config).catch(() => ({ data: [] })),
         axios.get("http://localhost:5000/movies/trash", config).catch(() => ({ data: [] })),
         axios.get("http://localhost:5000/genres/trash", config).catch(() => ({ data: [] })),
+        axios.get("http://localhost:5000/users/trash", config).catch(() => ({ data: [] })),
       ]);
 
       setMoviesList(moviesRes.data);
       setGenresList(genresRes.data);
+      setUsersList(usersRes.data || []);
       setTrashList(trashRes.data || []);
       setTrashGenresList(trashGenresRes.data || []);
+      setTrashUsersList(trashUsersRes.data || []);
       setLoading(false);
     } catch (err) {
       console.error("Lỗi khi tải dữ liệu:", err);
@@ -576,6 +603,233 @@ function AdminPage() {
     }
   };
 
+  // ==============================================================
+  // QUẢN LÝ NGƯỜI DÙNG (USERS MANAGEMENT HANDLERS)
+  // ==============================================================
+
+  // Mở modal Thêm người dùng
+  const handleOpenCreateUserModal = () => {
+    setUserModalMode("create");
+    setEditingUser(null);
+    setUserFormData({
+      username: "",
+      email: "",
+      password: "",
+      role: "USER",
+    });
+    setUserModalError("");
+    setIsUserModalOpen(true);
+  };
+
+  // Mở modal Chỉnh sửa người dùng
+  const handleOpenEditUserModal = (user) => {
+    setUserModalMode("edit");
+    setEditingUser(user);
+    setUserFormData({
+      username: user.username || "",
+      email: user.email || "",
+      password: "", // Để trống nếu không muốn đổi mật khẩu
+      role: user.role || "USER",
+    });
+    setUserModalError("");
+    setIsUserModalOpen(true);
+  };
+
+  // Lưu Người dùng (Thêm mới hoặc Cập nhật)
+  const handleSaveUser = async (e) => {
+    e.preventDefault();
+    setUserModalError("");
+
+    if (!userFormData.email || !userFormData.email.trim()) {
+      setUserModalError("Email không được để trống!");
+      return;
+    }
+
+    if (userModalMode === "create" && (!userFormData.password || userFormData.password.length < 6)) {
+      setUserModalError("Mật khẩu phải có ít nhất 6 ký tự!");
+      return;
+    }
+
+    try {
+      setUserFormLoading(true);
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+
+      if (userModalMode === "create") {
+        const res = await axios.post("http://localhost:5000/users", userFormData, config);
+        setUsersList((prev) => [...prev, res.data]);
+        setIsUserModalOpen(false);
+        alert(`🎉 Thêm tài khoản "${res.data.email}" thành công!`);
+      } else {
+        const payload = {
+          username: userFormData.username,
+          email: userFormData.email,
+          role: userFormData.role,
+        };
+        if (userFormData.password && userFormData.password.trim()) {
+          payload.password = userFormData.password.trim();
+        }
+        const res = await axios.put(`http://localhost:5000/users/${editingUser.id}`, payload, config);
+        setUsersList((prev) => prev.map((u) => (u.id === editingUser.id ? res.data : u)));
+        setIsUserModalOpen(false);
+        alert(`✅ Cập nhật tài khoản "${res.data.email}" thành công!`);
+      }
+      setUserFormLoading(false);
+    } catch (err) {
+      setUserFormLoading(false);
+      setUserModalError(err.response?.data?.error || "Có lỗi xảy ra khi lưu người dùng!");
+    }
+  };
+
+  // Đổi vai trò nhanh (Toggle ADMIN <-> USER)
+  const handleToggleUserRole = async (user) => {
+    const newRole = user.role === "ADMIN" ? "USER" : "ADMIN";
+    if (currentUser?.id === user.id && newRole === "USER") {
+      alert("⚠️ Bạn không thể tự hạ quyền Admin của chính mình khi đang đăng nhập!");
+      return;
+    }
+
+    if (!window.confirm(`Bạn có chắc chắn muốn đổi quyền của "${user.email}" thành ${newRole}?`)) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      const res = await axios.put(`http://localhost:5000/users/${user.id}/role`, { role: newRole }, config);
+      setUsersList((prev) => prev.map((u) => (u.id === user.id ? res.data.user : u)));
+      alert(`👑 ${res.data.message}`);
+    } catch (err) {
+      alert("Lỗi khi đổi quyền: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Xóa mềm người dùng (Đưa vào Thùng rác)
+  const handleDeleteUser = async (user) => {
+    if (currentUser?.id === user.id) {
+      alert("⚠️ Bạn không thể tự xóa tài khoản của chính mình khi đang đăng nhập!");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Bạn có chắc muốn chuyển tài khoản "${user.email}" vào Thùng rác?\n\nTài khoản này sẽ bị khóa và không thể đăng nhập vào hệ thống!`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      await axios.delete(`http://localhost:5000/users/${user.id}`, config);
+
+      setUsersList((prev) => prev.filter((u) => u.id !== user.id));
+      setTrashUsersList((prev) => [
+        { ...user, is_deleted: true, deleted_at: new Date().toISOString() },
+        ...prev,
+      ]);
+      alert(`🗑️ Đã chuyển tài khoản "${user.email}" vào Thùng rác!`);
+    } catch (err) {
+      alert("Lỗi khi xóa người dùng: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Khôi phục 1 người dùng từ Thùng rác
+  const handleRestoreUser = async (id, email) => {
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      const res = await axios.put(`http://localhost:5000/users/${id}/restore`, {}, config);
+
+      const restored = res.data.user;
+      setTrashUsersList((prev) => prev.filter((u) => u.id !== id));
+      setSelectedTrashUsers((prev) => prev.filter((item) => item !== id));
+      if (restored) {
+        setUsersList((prev) => [...prev, restored].sort((a, b) => a.id - b.id));
+      }
+      alert(`♻️ Đã khôi phục thành công tài khoản "${email}"!`);
+    } catch (err) {
+      alert("Lỗi khi khôi phục người dùng: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Xóa vĩnh viễn 1 người dùng khỏi Database
+  const handleForceDeleteUser = async (id, email) => {
+    if (currentUser?.id === id) {
+      alert("⚠️ Bạn không thể xóa vĩnh viễn tài khoản của chính mình!");
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `⚠️ CẢNH BÁO NGUY HIỂM: Tài khoản "${email}" sẽ bị XÓA VĨNH VIỄN khỏi PostgreSQL và KHÔNG THỂ khôi phục lại!\n\nToàn bộ danh sách phim đã lưu (bookmarks) của người dùng này cũng sẽ bị xóa vĩnh viễn.\n\nBạn có chắc chắn muốn tiếp tục?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      await axios.delete(`http://localhost:5000/users/${id}/force`, config);
+
+      setTrashUsersList((prev) => prev.filter((u) => u.id !== id));
+      setSelectedTrashUsers((prev) => prev.filter((item) => item !== id));
+      alert(`❌ Đã xóa vĩnh viễn tài khoản "${email}" khỏi cơ sở dữ liệu!`);
+    } catch (err) {
+      alert("Lỗi khi xóa vĩnh viễn người dùng: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Khôi phục nhiều người dùng đã chọn
+  const handleRestoreSelectedTrashUsers = async () => {
+    if (selectedTrashUsers.length === 0) return;
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      await Promise.all(
+        selectedTrashUsers.map((id) =>
+          axios.put(`http://localhost:5000/users/${id}/restore`, {}, config)
+        )
+      );
+      const count = selectedTrashUsers.length;
+      setSelectedTrashUsers([]);
+      alert(`♻️ Đã khôi phục thành công ${count} tài khoản người dùng!`);
+      fetchData();
+    } catch (err) {
+      alert("Lỗi khi khôi phục: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Xóa vĩnh viễn nhiều người dùng đã chọn
+  const handleForceDeleteSelectedTrashUsers = async () => {
+    if (selectedTrashUsers.length === 0) return;
+    if (
+      !window.confirm(
+        `⚠️ CẢNH BÁO NGUY HIỂM: Bạn có chắc chắn muốn XÓA VĨNH VIỄN ${selectedTrashUsers.length} tài khoản người dùng khỏi Database? Hành động này KHÔNG THỂ hoàn tác!`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem("token");
+      const config = token ? { headers: { Authorization: token } } : {};
+      await Promise.all(
+        selectedTrashUsers.map((id) =>
+          axios.delete(`http://localhost:5000/users/${id}/force`, config)
+        )
+      );
+      const count = selectedTrashUsers.length;
+      setTrashUsersList((prev) => prev.filter((u) => !selectedTrashUsers.includes(u.id)));
+      setSelectedTrashUsers([]);
+      alert(`❌ Đã xóa vĩnh viễn ${count} tài khoản khỏi cơ sở dữ liệu!`);
+    } catch (err) {
+      alert("Lỗi khi xóa vĩnh viễn: " + (err.response?.data?.error || err.message));
+    }
+  };
+
   // Chọn / Bỏ chọn tất cả phim ở trang hiện tại
   const handleSelectAll = (e, currentVisibleMovies) => {
     if (e.target.checked) {
@@ -688,7 +942,52 @@ function AdminPage() {
     );
   };
 
-  const totalTrashCount = trashList.length + trashGenresList.length;
+  // Lọc và phân trang cho Người dùng (Users Management)
+  const filteredUsers = usersList.filter((u) => {
+    const matchSearch =
+      u.username?.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
+      u.email?.toLowerCase().includes(userSearchTerm.toLowerCase());
+    const matchRole = userRoleFilter === "all" || u.role === userRoleFilter;
+    return matchSearch && matchRole;
+  });
+
+  const userTotalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+  const currentVisibleUsers = filteredUsers.slice(
+    (userCurrentPage - 1) * itemsPerPage,
+    userCurrentPage * itemsPerPage
+  );
+
+  const adminUsersCount = usersList.filter((u) => u.role === "ADMIN").length;
+  const standardUsersCount = usersList.filter((u) => u.role === "USER").length;
+
+  // Lọc và phân trang cho Thùng rác Người dùng (Users Trash)
+  const filteredTrashUsers = trashUsersList.filter((u) =>
+    u.username?.toLowerCase().includes(trashUserSearchTerm.toLowerCase()) ||
+    u.email?.toLowerCase().includes(trashUserSearchTerm.toLowerCase())
+  );
+
+  const trashUserTotalPages = Math.ceil(filteredTrashUsers.length / itemsPerPage) || 1;
+  const currentVisibleTrashUsers = filteredTrashUsers.slice(
+    (trashUserCurrentPage - 1) * itemsPerPage,
+    trashUserCurrentPage * itemsPerPage
+  );
+
+  const handleSelectAllTrashUsers = (e) => {
+    if (e.target.checked) {
+      setSelectedTrashUsers(currentVisibleTrashUsers.map((u) => u.id));
+    } else {
+      setSelectedTrashUsers([]);
+    }
+  };
+
+  const handleToggleSelectTrashUser = (id) => {
+    setSelectedTrashUsers((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
+
+  const totalTrashCount =
+    trashList.length + trashGenresList.length + trashUsersList.length;
 
   // Tính toán phân trang cho danh sách Phim hoạt động
   const totalPages = Math.ceil(filteredMovies.length / itemsPerPage) || 1;
@@ -798,16 +1097,21 @@ function AdminPage() {
             {/* Menu 4: Người dùng */}
             <button
               onClick={() => setActiveMenu("users")}
-              className={`w-full flex items-center gap-3.5 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+              className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                 activeMenu === "users"
                   ? "bg-red-600 text-white shadow-lg shadow-red-600/20"
                   : "text-zinc-400 hover:text-white hover:bg-zinc-800/60"
               }`}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-              <span>Người dùng</span>
+              <div className="flex items-center gap-3.5">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                <span>Người dùng</span>
+              </div>
+              <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-zinc-800 text-zinc-400">
+                {usersList.length}
+              </span>
             </button>
 
             {/* Menu 5: Thùng rác (Trash Bin) */}
@@ -816,6 +1120,7 @@ function AdminPage() {
                 setActiveMenu("trash");
                 setSelectedTrash([]);
                 setSelectedTrashGenres([]);
+                setSelectedTrashUsers([]);
               }}
               className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
                 activeMenu === "trash"
@@ -899,7 +1204,7 @@ function AdminPage() {
                 <>
                   <span className="text-amber-400">🗑️ Thùng rác Hệ thống</span>
                   <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                    {trashList.length} phim • {trashGenresList.length} thể loại đã xóa tạm
+                    {trashList.length} phim • {trashGenresList.length} thể loại • {trashUsersList.length} người dùng đã xóa
                   </span>
                 </>
               ) : activeMenu === "genres" ? (
@@ -911,7 +1216,10 @@ function AdminPage() {
                 </>
               ) : activeMenu === "users" ? (
                 <>
-                  <span>Quản lý Người dùng</span>
+                  <span>Quản lý Người dùng & Phân quyền</span>
+                  <span className="text-xs font-medium px-2.5 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
+                    {usersList.length} tài khoản đang hoạt động
+                  </span>
                 </>
               ) : (
                 <>
@@ -924,7 +1232,9 @@ function AdminPage() {
             </h1>
             <p className="text-xs text-zinc-400 mt-0.5">
               {activeMenu === "trash"
-                ? "Dữ liệu phim và thể loại bị xóa tạm thời được lưu trữ tại đây. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn khỏi Database."
+                ? "Dữ liệu phim, thể loại và người dùng bị xóa tạm thời được lưu trữ tại đây. Bạn có thể khôi phục lại hoặc xóa vĩnh viễn khỏi Database."
+                : activeMenu === "users"
+                ? "Quản lý danh sách tài khoản thành viên, phân quyền ADMIN / USER và kiểm soát truy cập"
                 : "Dữ liệu trực tiếp từ PostgreSQL Database & TMDB API"}
             </p>
           </div>
@@ -942,10 +1252,24 @@ function AdminPage() {
 
             {activeMenu === "trash" ? (
               <button
-                onClick={() => setActiveMenu(trashTab === "genres" ? "genres" : "movies")}
+                onClick={() =>
+                  setActiveMenu(
+                    trashTab === "users"
+                      ? "users"
+                      : trashTab === "genres"
+                      ? "genres"
+                      : "movies"
+                  )
+                }
                 className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl border border-zinc-700 transition-all duration-200"
               >
-                <span>{trashTab === "genres" ? "← Về Quản lý Thể loại" : "← Về Quản lý Phim"}</span>
+                <span>
+                  {trashTab === "users"
+                    ? "← Về Quản lý Người dùng"
+                    : trashTab === "genres"
+                    ? "← Về Quản lý Thể loại"
+                    : "← Về Quản lý Phim"}
+                </span>
               </button>
             ) : activeMenu === "genres" ? (
               <button
@@ -956,6 +1280,16 @@ function AdminPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
                 </svg>
                 <span>Thêm thể loại mới</span>
+              </button>
+            ) : activeMenu === "users" ? (
+              <button
+                onClick={handleOpenCreateUserModal}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-red-600/30 transition-all duration-200"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>+ Thêm người dùng mới</span>
               </button>
             ) : (
               <button
@@ -1416,12 +1750,13 @@ function AdminPage() {
       {/* ============================================================== */}
       {activeMenu === "trash" && (
         <div className="space-y-6">
-          {/* Sub-tabs Chuyển đổi giữa Phim đã xóa & Thể loại đã xóa */}
-          <div className="flex items-center gap-3 border-b border-zinc-800 pb-3">
+          {/* Sub-tabs Chuyển đổi giữa Phim, Thể loại & Người dùng đã xóa */}
+          <div className="flex items-center gap-3 border-b border-zinc-800 pb-3 flex-wrap">
             <button
               onClick={() => {
                 setTrashTab("movies");
                 setSelectedTrashGenres([]);
+                setSelectedTrashUsers([]);
               }}
               className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-200 ${
                 trashTab === "movies"
@@ -1445,6 +1780,7 @@ function AdminPage() {
               onClick={() => {
                 setTrashTab("genres");
                 setSelectedTrash([]);
+                setSelectedTrashUsers([]);
               }}
               className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-200 ${
                 trashTab === "genres"
@@ -1461,6 +1797,30 @@ function AdminPage() {
                 }`}
               >
                 {trashGenresList.length}
+              </span>
+            </button>
+
+            <button
+              onClick={() => {
+                setTrashTab("users");
+                setSelectedTrash([]);
+                setSelectedTrashGenres([]);
+              }}
+              className={`flex items-center gap-2.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-all duration-200 ${
+                trashTab === "users"
+                  ? "bg-amber-500/15 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10"
+                  : "text-zinc-400 hover:text-white hover:bg-zinc-800/60 border border-transparent"
+              }`}
+            >
+              <span>👥 Người dùng đã xóa</span>
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                  trashTab === "users"
+                    ? "bg-amber-400 text-zinc-950"
+                    : "bg-zinc-800 text-zinc-400"
+                }`}
+              >
+                {trashUsersList.length}
               </span>
             </button>
           </div>
@@ -1964,6 +2324,259 @@ function AdminPage() {
               </div>
             </>
           )}
+
+          {/* TAB 3: THÙNG RÁC NGƯỜI DÙNG */}
+          {trashTab === "users" && (
+            <>
+              {/* Thống kê thùng rác người dùng */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="bg-[#16161c] border border-amber-500/20 p-5 rounded-2xl relative overflow-hidden">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Tài khoản trong thùng rác
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-2xl font-black text-amber-400">{trashUsersList.length}</span>
+                    <span className="text-xs text-zinc-400">tài khoản</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-1">Được lưu trữ an toàn trong Database</p>
+                </div>
+
+                <div className="bg-[#16161c] border border-zinc-800/80 p-5 rounded-2xl relative overflow-hidden">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Kiểm soát bảo mật
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-lg font-bold text-red-400">Khóa truy cập</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-1">Tài khoản bị xóa không thể đăng nhập</p>
+                </div>
+
+                <div className="bg-[#16161c] border border-zinc-800/80 p-5 rounded-2xl relative overflow-hidden">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                    Bảo toàn dữ liệu
+                  </span>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <span className="text-lg font-bold text-emerald-400">100% Bookmarks</span>
+                  </div>
+                  <p className="text-[11px] text-zinc-500 mt-1">Khôi phục đầy đủ danh sách phim đã lưu</p>
+                </div>
+              </div>
+
+              {/* Thanh tìm kiếm & Hành động hàng loạt trong Thùng rác Người dùng */}
+              <div className="bg-[#16161c] border border-zinc-800/80 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="relative w-full sm:w-96">
+                  <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={trashUserSearchTerm}
+                    onChange={(e) => {
+                      setTrashUserSearchTerm(e.target.value);
+                      setTrashUserCurrentPage(1);
+                    }}
+                    placeholder="Tìm tài khoản trong thùng rác..."
+                    className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 focus:border-amber-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                  {selectedTrashUsers.length > 0 && (
+                    <>
+                      <button
+                        onClick={handleRestoreSelectedTrashUsers}
+                        className="px-3.5 py-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        <span>Khôi phục ({selectedTrashUsers.length})</span>
+                      </button>
+
+                      <button
+                        onClick={handleForceDeleteSelectedTrashUsers}
+                        className="px-3.5 py-2 bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 text-xs font-semibold rounded-xl transition-colors flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        <span>Xóa vĩnh viễn ({selectedTrashUsers.length})</span>
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Bảng danh sách Người dùng trong thùng rác */}
+              <div className="bg-[#16161c] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-zinc-800 text-zinc-400 uppercase tracking-wider font-semibold bg-zinc-900/60">
+                        <th className="py-4 px-4 w-12 text-center">
+                          <input
+                            type="checkbox"
+                            checked={
+                              currentVisibleTrashUsers.length > 0 &&
+                              currentVisibleTrashUsers.every((u) => selectedTrashUsers.includes(u.id))
+                            }
+                            onChange={handleSelectAllTrashUsers}
+                            className="rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                          />
+                        </th>
+                        <th className="py-4 px-6 w-20 text-center">ID</th>
+                        <th className="py-4 px-6">Tài khoản</th>
+                        <th className="py-4 px-6 text-center">Vai trò</th>
+                        <th className="py-4 px-6 text-center">Bookmarks</th>
+                        <th className="py-4 px-6">Thời gian xóa</th>
+                        <th className="py-4 px-6 text-center w-48">Hành động</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-800/60">
+                      {currentVisibleTrashUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="py-16 text-center text-zinc-400">
+                            <div className="flex flex-col items-center justify-center gap-3">
+                              <div className="w-16 h-16 rounded-full bg-zinc-800/80 flex items-center justify-center text-zinc-500">
+                                <svg className="w-8 h-8 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                              </div>
+                              <p className="text-sm font-bold text-white">Thùng rác người dùng trống!</p>
+                              <p className="text-xs text-zinc-500 max-w-sm">
+                                Hiện không có tài khoản nào trong thùng rác. Khi bạn xóa người dùng ở Quản lý Người dùng, tài khoản sẽ được lưu trữ an toàn tại đây.
+                              </p>
+                              <button
+                                onClick={() => setActiveMenu("users")}
+                                className="mt-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs transition-colors"
+                              >
+                                Về Quản lý Người dùng
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        currentVisibleTrashUsers.map((user) => {
+                          const isSelected = selectedTrashUsers.includes(user.id);
+                          const initials = user.username
+                            ? user.username.slice(0, 2).toUpperCase()
+                            : user.email.slice(0, 2).toUpperCase();
+
+                          return (
+                            <tr
+                              key={user.id}
+                              className={`hover:bg-zinc-800/30 transition-colors ${
+                                isSelected ? "bg-red-500/5" : ""
+                              }`}
+                            >
+                              <td className="py-3.5 px-4 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSelectTrashUser(user.id)}
+                                  className="rounded border-zinc-700 bg-zinc-800 text-red-600 focus:ring-0 w-3.5 h-3.5 cursor-pointer"
+                                />
+                              </td>
+                              <td className="py-3.5 px-6 text-center font-mono text-zinc-500">
+                                #{user.id}
+                              </td>
+                              <td className="py-3.5 px-6">
+                                <div className="flex items-center gap-3">
+                                  <div className="w-8 h-8 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 flex items-center justify-center font-black text-xs">
+                                    {initials}
+                                  </div>
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-white text-xs">
+                                        {user.username || "Chưa đặt tên"}
+                                      </span>
+                                      <span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded font-semibold">
+                                        Đã tạm khóa
+                                      </span>
+                                    </div>
+                                    <p className="text-[11px] text-zinc-400">{user.email}</p>
+                                  </div>
+                                </div>
+                              </td>
+                              <td className="py-3.5 px-6 text-center">
+                                {user.role === "ADMIN" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-red-500/10 text-red-400 border border-red-500/30">
+                                    👑 ADMIN
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700">
+                                    👤 USER
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-6 text-center text-zinc-300 font-medium">
+                                {user.bookmarks_count || 0} phim
+                              </td>
+                              <td className="py-3.5 px-6 text-zinc-400 text-[11px]">
+                                {user.deleted_at
+                                  ? new Date(user.deleted_at).toLocaleString("vi-VN")
+                                  : "Vừa xong"}
+                              </td>
+                              <td className="py-3.5 px-6 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  {/* Nút Khôi phục */}
+                                  <button
+                                    onClick={() => handleRestoreUser(user.id, user.email)}
+                                    title="Khôi phục tài khoản này"
+                                    className="px-2.5 py-1 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-lg transition-colors flex items-center gap-1 font-semibold text-[11px] border border-emerald-500/20"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    <span>Khôi phục</span>
+                                  </button>
+
+                                  {/* Nút Xóa vĩnh viễn */}
+                                  <button
+                                    onClick={() => handleForceDeleteUser(user.id, user.email)}
+                                    title="Xóa vĩnh viễn khỏi Database"
+                                    className="px-2.5 py-1 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg transition-colors flex items-center gap-1 font-semibold text-[11px] border border-red-500/20"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                    <span>Xóa hẳn</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Phân trang thùng rác người dùng */}
+                {trashUserTotalPages > 1 && (
+                  <div className="p-4 border-t border-zinc-800/80 bg-[#16161c] flex items-center justify-between text-xs text-zinc-400">
+                    <span>Trang {trashUserCurrentPage} / {trashUserTotalPages}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        disabled={trashUserCurrentPage === 1}
+                        onClick={() => setTrashUserCurrentPage((p) => Math.max(1, p - 1))}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300 disabled:opacity-40"
+                      >
+                        ◀ Trước
+                      </button>
+                      <button
+                        disabled={trashUserCurrentPage === trashUserTotalPages}
+                        onClick={() => setTrashUserCurrentPage((p) => Math.min(trashUserTotalPages, p + 1))}
+                        className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300 disabled:opacity-40"
+                      >
+                        Sau ▶
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -2138,25 +2751,253 @@ function AdminPage() {
       )}
 
       {/* ============================================================== */}
-      {/* VIEW: QUẢN LÝ NGƯỜI DÙNG (PLACEHOLDER)                         */}
+      {/* VIEW: QUẢN LÝ NGƯỜI DÙNG & PHÂN QUYỀN (USERS MANAGEMENT)       */}
       {/* ============================================================== */}
       {activeMenu === "users" && (
-        <div className="bg-[#16161c] border border-zinc-800/80 p-12 rounded-2xl text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-blue-600/10 text-blue-500 mx-auto flex items-center justify-center">
-            <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-            </svg>
+        <div className="space-y-6">
+          {/* Thống kê Người dùng */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="bg-[#16161c] border border-zinc-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-zinc-700 transition-colors">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Tổng số người dùng
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-2xl font-black text-white">{usersList.length}</span>
+                <span className="text-xs text-zinc-400">tài khoản</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Đang hoạt động trên hệ thống</p>
+            </div>
+
+            <div className="bg-[#16161c] border border-zinc-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-zinc-700 transition-colors">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Quản trị viên (ADMIN)
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-2xl font-black text-red-500">{adminUsersCount}</span>
+                <span className="text-xs text-zinc-400">tài khoản</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Có toàn quyền quản trị CMS & Database</p>
+            </div>
+
+            <div className="bg-[#16161c] border border-zinc-800/80 p-5 rounded-2xl relative overflow-hidden group hover:border-zinc-700 transition-colors">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
+                Thành viên (USER)
+              </span>
+              <div className="flex items-baseline gap-2 mt-2">
+                <span className="text-2xl font-black text-blue-400">{standardUsersCount}</span>
+                <span className="text-xs text-zinc-400">thành viên</span>
+              </div>
+              <p className="text-[11px] text-zinc-500 mt-1">Người xem phim & lưu danh sách yêu thích</p>
+            </div>
           </div>
-          <h3 className="text-xl font-bold text-white">Quản lý Người dùng & Phân quyền</h3>
-          <p className="text-xs text-zinc-400 max-w-md mx-auto">
-            Xem danh sách tài khoản, nâng quyền ADMIN / hạ quyền USER và xóa tài khoản vi phạm sẽ được tích hợp giao diện ở bước tiếp theo!
-          </p>
-          <button
-            onClick={() => setActiveMenu("movies")}
-            className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition-colors shadow-lg shadow-red-600/20"
-          >
-            ← Quay lại Quản lý Phim
-          </button>
+
+          {/* Thanh tìm kiếm, Bộ lọc vai trò & Nút thêm tài khoản */}
+          <div className="bg-[#16161c] border border-zinc-800/80 p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto flex-1 max-w-lg">
+              <div className="relative flex-1">
+                <svg className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <input
+                  type="text"
+                  value={userSearchTerm}
+                  onChange={(e) => {
+                    setUserSearchTerm(e.target.value);
+                    setUserCurrentPage(1);
+                  }}
+                  placeholder="Tìm theo tên hiển thị hoặc email..."
+                  className="w-full pl-10 pr-4 py-2 bg-zinc-900 border border-zinc-800 focus:border-red-500 rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none transition-colors"
+                />
+              </div>
+
+              {/* Lọc theo Vai trò */}
+              <select
+                value={userRoleFilter}
+                onChange={(e) => {
+                  setUserRoleFilter(e.target.value);
+                  setUserCurrentPage(1);
+                }}
+                className="py-2 px-3 bg-zinc-900 border border-zinc-800 focus:border-red-500 rounded-xl text-xs text-white focus:outline-none transition-colors cursor-pointer"
+              >
+                <option value="all">Tất cả vai trò</option>
+                <option value="ADMIN">Chỉ Admin (Quản trị)</option>
+                <option value="USER">Chỉ User (Thành viên)</option>
+              </select>
+            </div>
+
+            <button
+              onClick={handleOpenCreateUserModal}
+              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-red-600/30 transition-all duration-200"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>+ Thêm người dùng mới</span>
+            </button>
+          </div>
+
+          {/* Bảng danh sách Người dùng */}
+          <div className="bg-[#16161c] border border-zinc-800/80 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-zinc-400 uppercase tracking-wider font-semibold bg-zinc-900/60">
+                    <th className="py-4 px-6 w-20 text-center">ID</th>
+                    <th className="py-4 px-6">Người dùng</th>
+                    <th className="py-4 px-6 text-center">Vai trò</th>
+                    <th className="py-4 px-6 text-center">Phim đã lưu</th>
+                    <th className="py-4 px-6">Ngày tham gia</th>
+                    <th className="py-4 px-6 text-center">Trạng thái</th>
+                    <th className="py-4 px-6 text-center w-40">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {currentVisibleUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center text-zinc-400">
+                        Không tìm thấy người dùng nào phù hợp với bộ lọc hiện tại.
+                      </td>
+                    </tr>
+                  ) : (
+                    currentVisibleUsers.map((user) => {
+                      const isSelf = currentUser?.id === user.id;
+                      const initials = user.username
+                        ? user.username.slice(0, 2).toUpperCase()
+                        : user.email.slice(0, 2).toUpperCase();
+
+                      return (
+                        <tr key={user.id} className={`hover:bg-zinc-800/30 transition-colors ${isSelf ? "bg-red-600/5" : ""}`}>
+                          <td className="py-4 px-6 text-center font-mono text-zinc-500">
+                            #{user.id}
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-full flex items-center justify-center font-extrabold text-xs shadow-md ${
+                                user.role === "ADMIN"
+                                  ? "bg-gradient-to-tr from-red-600 to-amber-500 text-white"
+                                  : "bg-zinc-800 border border-zinc-700 text-zinc-300"
+                              }`}>
+                                {initials}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-white text-sm">
+                                    {user.username || "Chưa đặt tên"}
+                                  </span>
+                                  {isSelf && (
+                                    <span className="text-[10px] font-extrabold bg-red-500/10 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded">
+                                      Bạn
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-[11px] text-zinc-400">{user.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            {user.role === "ADMIN" ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-extrabold bg-gradient-to-r from-red-500/10 to-amber-500/10 text-red-400 border border-red-500/30">
+                                👑 ADMIN
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/30">
+                                👤 USER
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className="font-semibold text-zinc-300 bg-zinc-900 border border-zinc-800 px-2.5 py-1 rounded-lg">
+                              🔖 {user.bookmarks_count || 0} phim
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-zinc-400 text-xs">
+                            {user.created_at
+                              ? new Date(user.created_at).toLocaleDateString("vi-VN")
+                              : "Ban đầu"}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                              Hoạt động
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Nút Đổi quyền nhanh */}
+                              <button
+                                onClick={() => handleToggleUserRole(user)}
+                                disabled={isSelf}
+                                title={isSelf ? "Không thể tự hạ quyền của chính mình" : `Chuyển sang ${user.role === "ADMIN" ? "USER" : "ADMIN"}`}
+                                className={`p-1.5 rounded-lg transition-colors border ${
+                                  isSelf
+                                    ? "opacity-30 cursor-not-allowed border-zinc-800 text-zinc-600"
+                                    : "text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 border-amber-500/20"
+                                }`}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                                </svg>
+                              </button>
+
+                              {/* Nút Sửa thông tin */}
+                              <button
+                                onClick={() => handleOpenEditUserModal(user)}
+                                title="Chỉnh sửa thông tin tài khoản"
+                                className="p-1.5 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 rounded-lg transition-colors border border-blue-500/20"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+
+                              {/* Nút Xóa (Mềm) */}
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                disabled={isSelf}
+                                title={isSelf ? "Không thể tự xóa tài khoản đang đăng nhập" : "Chuyển vào thùng rác"}
+                                className={`p-1.5 rounded-lg transition-colors border ${
+                                  isSelf
+                                    ? "opacity-30 cursor-not-allowed border-zinc-800 text-zinc-600"
+                                    : "text-red-400 hover:text-red-300 hover:bg-red-500/10 border-red-500/20"
+                                }`}
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Phân trang Người dùng */}
+            {userTotalPages > 1 && (
+              <div className="p-4 border-t border-zinc-800/80 bg-[#16161c] flex items-center justify-between text-xs text-zinc-400">
+                <span>Trang {userCurrentPage} / {userTotalPages}</span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    disabled={userCurrentPage === 1}
+                    onClick={() => setUserCurrentPage((p) => Math.max(1, p - 1))}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300 disabled:opacity-40"
+                  >
+                    ◀ Trước
+                  </button>
+                  <button
+                    disabled={userCurrentPage === userTotalPages}
+                    onClick={() => setUserCurrentPage((p) => Math.min(userTotalPages, p + 1))}
+                    className="px-3 py-1.5 rounded-lg border border-zinc-800 bg-zinc-900 text-zinc-300 disabled:opacity-40"
+                  >
+                    Sau ▶
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -2536,6 +3377,170 @@ function AdminPage() {
                     </>
                   ) : (
                     <span>{genreModalMode === "create" ? "Tạo thể loại" : "Lưu thay đổi"}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL THÊM / CHỈNH SỬA NGƯỜI DÙNG                              */}
+      {/* ============================================================== */}
+      {isUserModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#181824] border border-zinc-700/80 rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-blue-600/20 border border-blue-500/30 flex items-center justify-center text-blue-400 font-bold text-lg">
+                  👤
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">
+                    {userModalMode === "create" ? "Thêm người dùng mới" : "Chỉnh sửa thông tin tài khoản"}
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    {userModalMode === "create"
+                      ? "Tạo tài khoản mới và thiết lập vai trò đăng nhập"
+                      : `Cập nhật tài khoản ID #${editingUser?.id}`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsUserModalOpen(false)}
+                className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Thông báo lỗi Modal */}
+            {userModalError && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl flex items-center gap-2 text-red-400 text-xs">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{userModalError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveUser} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Tên hiển thị / Họ tên
+                </label>
+                <input
+                  type="text"
+                  value={userFormData.username}
+                  onChange={(e) => setUserFormData({ ...userFormData, username: e.target.value })}
+                  placeholder="VD: Nguyễn Văn A..."
+                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-700/80 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Địa chỉ Email <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="email"
+                  value={userFormData.email}
+                  onChange={(e) => setUserFormData({ ...userFormData, email: e.target.value })}
+                  placeholder="VD: nguyenvana@gmail.com"
+                  required
+                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-700/80 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  {userModalMode === "create" ? "Mật khẩu" : "Mật khẩu mới (Tùy chọn)"}{" "}
+                  {userModalMode === "create" && <span className="text-red-500">*</span>}
+                </label>
+                <input
+                  type="password"
+                  value={userFormData.password}
+                  onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
+                  placeholder={
+                    userModalMode === "create"
+                      ? "Tối thiểu 6 ký tự..."
+                      : "Để trống nếu không muốn đổi mật khẩu"
+                  }
+                  required={userModalMode === "create"}
+                  className="w-full px-3.5 py-2.5 bg-zinc-900 border border-zinc-700/80 rounded-xl text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-red-500"
+                />
+                {userModalMode === "edit" && (
+                  <p className="text-[11px] text-zinc-500 mt-1">
+                    Chỉ nhập khi bạn muốn thiết lập lại mật khẩu mới cho tài khoản này.
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">
+                  Vai trò & Phân quyền <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setUserFormData({ ...userFormData, role: "USER" })}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      userFormData.role === "USER"
+                        ? "bg-blue-500/15 border-blue-500/50 text-white shadow-lg shadow-blue-500/10"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="text-lg">👤</span>
+                    <div>
+                      <p className="font-bold text-xs">USER</p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">Thành viên thông thường</p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setUserFormData({ ...userFormData, role: "ADMIN" })}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      userFormData.role === "ADMIN"
+                        ? "bg-red-500/15 border-red-500/50 text-white shadow-lg shadow-red-500/10"
+                        : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <span className="text-lg">👑</span>
+                    <div>
+                      <p className="font-bold text-xs">ADMIN</p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">Toàn quyền quản trị</p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-2.5 border-t border-zinc-800">
+                <button
+                  type="button"
+                  disabled={userFormLoading}
+                  onClick={() => setIsUserModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="submit"
+                  disabled={userFormLoading}
+                  className="px-5 py-2 rounded-xl text-xs font-bold bg-red-600 hover:bg-red-700 active:scale-95 text-white shadow-lg shadow-red-600/30 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {userFormLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <span>{userModalMode === "create" ? "Tạo người dùng" : "Lưu thay đổi"}</span>
                   )}
                 </button>
               </div>

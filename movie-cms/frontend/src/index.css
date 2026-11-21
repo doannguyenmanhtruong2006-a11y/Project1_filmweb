@@ -17,17 +17,80 @@
   animation: fadeIn 0.8s ease-out;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* =========================================================
+   CUSTOM THEME FOR VIDEO.JS (FILMWEB CINEMA RED/BLACK)
+   ========================================================= */
+
+.video-js.vjs-theme-filmweb {
+  font-family: inherit;
+  color: #fff;
+  border-radius: 1rem;
+  overflow: hidden;
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.8s ease-out;
+/* Big Play Button - Centered, Circular, Red Glow */
+.video-js.vjs-theme-filmweb .vjs-big-play-button {
+  width: 72px;
+  height: 72px;
+  line-height: 70px;
+  border-radius: 50%;
+  background: rgba(229, 9, 20, 0.85);
+  border: 3px solid rgba(255, 255, 255, 0.9);
+  box-shadow: 0 10px 25px rgba(229, 9, 20, 0.5);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transform: translate(-50%, -50%);
+  top: 50%;
+  left: 50%;
+  margin: 0;
+}
+
+.video-js.vjs-theme-filmweb:hover .vjs-big-play-button,
+.video-js.vjs-theme-filmweb .vjs-big-play-button:focus {
+  background: #e50914;
+  border-color: #fff;
+  transform: translate(-50%, -50%) scale(1.12);
+  box-shadow: 0 15px 35px rgba(229, 9, 20, 0.7);
+}
+
+/* Control Bar Styling */
+.video-js.vjs-theme-filmweb .vjs-control-bar {
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.92) 0%, rgba(0, 0, 0, 0.5) 70%, transparent 100%);
+  height: 48px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+
+/* Red Progress Bar */
+.video-js.vjs-theme-filmweb .vjs-play-progress {
+  background: #e50914 !important;
+}
+
+.video-js.vjs-theme-filmweb .vjs-play-progress:before {
+  color: #fff;
+  font-size: 14px;
+}
+
+/* Volume Slider */
+.video-js.vjs-theme-filmweb .vjs-volume-level {
+  background: #e50914 !important;
+}
+
+/* Progress Slider background */
+.video-js.vjs-theme-filmweb .vjs-slider {
+  background-color: rgba(255, 255, 255, 0.25);
+  border-radius: 3px;
+}
+
+/* Menu popup (Playback rate) */
+.video-js.vjs-theme-filmweb .vjs-menu-button-popup .vjs-menu .vjs-menu-content {
+  background-color: rgba(20, 20, 20, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.8);
+}
+
+.video-js.vjs-theme-filmweb .vjs-menu-item.vjs-selected {
+  background-color: #e50914 !important;
+  color: #fff !important;
+  font-weight: bold;
 }

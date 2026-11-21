@@ -1,12 +1,19 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
 
 function HomePage() {
+    const navigate = useNavigate();
     const [movies, setMovies] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
+
+    // Quản lý Bookmark (Phim yêu thích)
+    const [bookmarkedList, setBookmarkedList] = useState([]);
+    const [bookmarkedIds, setBookmarkedIds] = useState(new Set());
+    const [showBookmarksModal, setShowBookmarksModal] = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
 
     // Trạng thái người dùng đã đăng nhập (lấy từ localStorage)
     const [currentUser, setCurrentUser] = useState(() => {
@@ -23,6 +30,76 @@ function HomePage() {
         localStorage.removeItem("token");
         localStorage.removeItem("user");
         setCurrentUser(null);
+        setBookmarkedList([]);
+        setBookmarkedIds(new Set());
+    };
+
+    // Lấy danh sách bookmark của user
+    const fetchBookmarks = () => {
+        const token = localStorage.getItem("token");
+        if (!token) {
+            setBookmarkedList([]);
+            setBookmarkedIds(new Set());
+            return;
+        }
+
+        axios
+            .get("http://localhost:5000/bookmarks", {
+                headers: { Authorization: token },
+            })
+            .then((res) => {
+                setBookmarkedList(res.data);
+                setBookmarkedIds(new Set(res.data.map((b) => b.movie_id)));
+            })
+            .catch(() => {});
+    };
+
+    useEffect(() => {
+        fetchBookmarks();
+    }, [currentUser]);
+
+    // Xử lý Toggle Bookmark
+    const handleToggleBookmark = async (e, movieId, movieTitle) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        const token = localStorage.getItem("token");
+        if (!token || !currentUser) {
+            if (
+                window.confirm(
+                    "Bạn cần đăng nhập để lưu phim vào danh sách yêu thích.\n\nBạn có muốn chuyển đến trang Đăng nhập ngay bây giờ không?"
+                )
+            ) {
+                navigate("/login");
+            }
+            return;
+        }
+
+        try {
+            const res = await axios.post(
+                `http://localhost:5000/bookmarks/toggle/${movieId}`,
+                {},
+                { headers: { Authorization: token } }
+            );
+
+            const isBookmarked = res.data.is_bookmarked;
+            setBookmarkedIds((prev) => {
+                const updated = new Set(prev);
+                if (isBookmarked) {
+                    updated.add(movieId);
+                } else {
+                    updated.delete(movieId);
+                }
+                return updated;
+            });
+
+            fetchBookmarks();
+            setToastMessage(res.data.message);
+            setTimeout(() => setToastMessage(""), 3500);
+        } catch (err) {
+            console.error("Lỗi khi bookmark:", err);
+            alert("Lỗi: " + (err.response?.data?.error || err.message));
+        }
     };
 
     // Lấy 6 phim đầu tiên có ảnh làm slideshow banner
@@ -104,6 +181,19 @@ function HomePage() {
 
                     {currentUser ? (
                         <div className="flex items-center gap-3">
+                            {/* Nút Xem phim đã lưu (Bookmarks) */}
+                            <button
+                                onClick={() => setShowBookmarksModal(true)}
+                                className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs sm:text-sm font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+                            >
+                                <span>🔖 Phim đã lưu</span>
+                                {bookmarkedIds.size > 0 && (
+                                    <span className="bg-red-600 text-white text-[10px] px-1.5 py-0.2 rounded-full font-bold">
+                                        {bookmarkedIds.size}
+                                    </span>
+                                )}
+                            </button>
+
                             {currentUser.role === "ADMIN" && (
                                 <Link
                                     to="/admin"
@@ -265,11 +355,28 @@ function HomePage() {
                                             <button className="bg-white text-black text-xs font-bold px-3 py-1.5 rounded hover:bg-gray-200 transition-colors">
                                                 ▶ Xem
                                             </button>
-                                            <button className="bg-gray-600/80 text-white text-xs font-bold px-3 py-1.5 rounded hover:bg-gray-500 transition-colors">
-                                                + Lưu
+                                            <button
+                                                onClick={(e) => handleToggleBookmark(e, movie.id, movie.title)}
+                                                className={`text-xs font-bold px-3 py-1.5 rounded transition-all flex items-center gap-1 ${
+                                                    bookmarkedIds.has(movie.id)
+                                                        ? "bg-red-600 text-white shadow-md shadow-red-600/40"
+                                                        : "bg-gray-600/80 hover:bg-gray-500 text-white"
+                                                }`}
+                                            >
+                                                {bookmarkedIds.has(movie.id) ? "✓ Đã lưu" : "+ Lưu"}
                                             </button>
                                         </div>
                                     </div>
+
+                                    {/* Ribbon / Badge đã lưu ở góc trên bên trái */}
+                                    {bookmarkedIds.has(movie.id) && (
+                                        <div
+                                            title="Đã lưu vào danh sách yêu thích"
+                                            className="absolute top-2 left-2 z-10 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center text-xs shadow-lg shadow-red-600/50"
+                                        >
+                                            ♥
+                                        </div>
+                                    )}
 
                                     {/* Badge năm - hiện mặc định, ẩn khi hover */}
                                     {movie.release_year && (
@@ -346,6 +453,124 @@ function HomePage() {
                     </div>
                 </div>
             </footer>
+
+            {/* ===== MODAL DANH SÁCH PHIM YÊU THÍCH (MY BOOKMARKS) ===== */}
+            {showBookmarksModal && (
+                <div
+                    className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+                    onClick={() => setShowBookmarksModal(false)}
+                >
+                    <div
+                        className="bg-[#181824] border border-zinc-700/80 rounded-3xl max-w-4xl w-full p-6 sm:p-8 shadow-2xl max-h-[85vh] flex flex-col"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between pb-4 border-b border-zinc-800 flex-shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-red-600/20 border border-red-500/30 flex items-center justify-center text-red-500 text-lg">
+                                    🔖
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                        <span>Phim yêu thích của tôi</span>
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/30">
+                                            {bookmarkedList.length} phim
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-zinc-400">
+                                        Danh sách các bộ phim bạn đã đánh dấu để xem lại
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowBookmarksModal(false)}
+                                className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        {/* Modal Content */}
+                        <div className="py-6 overflow-y-auto flex-1">
+                            {bookmarkedList.length === 0 ? (
+                                <div className="text-center py-16 space-y-3">
+                                    <div className="w-16 h-16 rounded-full bg-zinc-800/80 mx-auto flex items-center justify-center text-zinc-500 text-2xl">
+                                        🎬
+                                    </div>
+                                    <p className="text-sm font-bold text-white">Chưa có phim nào trong danh sách!</p>
+                                    <p className="text-xs text-zinc-400 max-w-sm mx-auto">
+                                        Hãy bấm nút "+ Lưu" ở bất kỳ bộ phim nào ngoài trang chủ để lưu vào danh sách yêu thích của bạn.
+                                    </p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                                    {bookmarkedList.map((item) => {
+                                        const m = item.movie;
+                                        if (!m) return null;
+                                        return (
+                                            <div
+                                                key={item.movie_id}
+                                                className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden group hover:border-zinc-700 transition-all flex flex-col"
+                                            >
+                                                <div className="relative aspect-[2/3] overflow-hidden bg-zinc-800">
+                                                    <img
+                                                        src={m.thumbnail_url || m.poster_url || "https://via.placeholder.com/300x450"}
+                                                        alt={m.title}
+                                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                                    />
+                                                    {m.imdb_score && (
+                                                        <span className="absolute top-2 right-2 bg-black/70 backdrop-blur-sm text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                                                            ★ {m.imdb_score}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="p-3 flex-1 flex flex-col justify-between">
+                                                    <div>
+                                                        <h4 className="font-bold text-xs text-white line-clamp-1 group-hover:text-red-400 transition-colors">
+                                                            {m.title}
+                                                        </h4>
+                                                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                                                            {m.release_year || "—"} • {m.country || "Chưa rõ"}
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-3 pt-2 border-t border-zinc-800/60">
+                                                        <Link
+                                                            to={`/movie/${m.id}`}
+                                                            onClick={() => setShowBookmarksModal(false)}
+                                                            className="flex-1 text-center py-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-[11px] rounded-lg transition-colors"
+                                                        >
+                                                            Xem phim
+                                                        </Link>
+                                                        <button
+                                                            onClick={(e) => handleToggleBookmark(e, m.id, m.title)}
+                                                            title="Bỏ lưu khỏi danh sách"
+                                                            className="p-1.5 text-zinc-400 hover:text-red-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                                                        >
+                                                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Toast thông báo Bookmark */}
+            {toastMessage && (
+                <div className="fixed bottom-8 right-8 z-50 bg-zinc-900 border border-amber-500/30 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in">
+                    <span className="text-xl">💖</span>
+                    <span className="text-sm font-semibold">{toastMessage}</span>
+                </div>
+            )}
         </div>
     );
 }

@@ -56,6 +56,19 @@ function AdminPage() {
   const [userFormLoading, setUserFormLoading] = useState(false);
   const [userModalError, setUserModalError] = useState("");
 
+  // Quản lý Tập phim & Video Stream (Episodes Management)
+  const [isEpisodeModalOpen, setIsEpisodeModalOpen] = useState(false);
+  const [currentEpisodeMovie, setCurrentEpisodeMovie] = useState(null);
+  const [movieEpisodes, setMovieEpisodes] = useState([]);
+  const [episodesLoading, setEpisodesLoading] = useState(false);
+  const [episodeFormData, setEpisodeFormData] = useState({
+    episode_number: 1,
+    video_url: "",
+  });
+  const [episodeFormLoading, setEpisodeFormLoading] = useState(false);
+  const [episodeError, setEpisodeError] = useState("");
+  const [episodeSuccess, setEpisodeSuccess] = useState("");
+
   // Bộ lọc & Tìm kiếm
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("all");
@@ -827,6 +840,94 @@ function AdminPage() {
       alert(`❌ Đã xóa vĩnh viễn ${count} tài khoản khỏi cơ sở dữ liệu!`);
     } catch (err) {
       alert("Lỗi khi xóa vĩnh viễn: " + (err.response?.data?.error || err.message));
+    }
+  };
+
+  // Mở modal Quản lý Tập phim & Video Stream
+  const handleOpenEpisodesModal = async (movie) => {
+    setCurrentEpisodeMovie(movie);
+    setEpisodeError("");
+    setEpisodeSuccess("");
+    setEpisodesLoading(true);
+    setIsEpisodeModalOpen(true);
+
+    try {
+      const res = await axios.get(`http://localhost:5000/movies/${movie.id}/episodes`);
+      const eps = res.data || [];
+      setMovieEpisodes(eps);
+      const nextEpNum = eps.length > 0 ? Math.max(...eps.map((e) => e.episode_number || 0)) + 1 : 1;
+      setEpisodeFormData({
+        episode_number: nextEpNum,
+        video_url: "",
+      });
+      setEpisodesLoading(false);
+    } catch (err) {
+      console.error("Lỗi khi tải danh sách tập phim:", err);
+      setEpisodeError("Không thể tải danh sách tập phim từ server.");
+      setEpisodesLoading(false);
+    }
+  };
+
+  // Thêm tập phim mới cho phim
+  const handleAddEpisode = async (e) => {
+    e.preventDefault();
+    if (!currentEpisodeMovie) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("Phiên làm việc đã hết hạn. Vui lòng đăng nhập lại!");
+      return;
+    }
+
+    try {
+      setEpisodeFormLoading(true);
+      setEpisodeError("");
+      setEpisodeSuccess("");
+
+      const res = await axios.post(
+        "http://localhost:5000/episodes",
+        {
+          movie_id: currentEpisodeMovie.id,
+          episode_number: parseInt(episodeFormData.episode_number),
+          video_url: episodeFormData.video_url.trim(),
+        },
+        { headers: { Authorization: token } }
+      );
+
+      const updatedList = [...movieEpisodes, res.data].sort(
+        (a, b) => a.episode_number - b.episode_number
+      );
+      setMovieEpisodes(updatedList);
+      setEpisodeSuccess(`🎉 Đã thêm Tập ${res.data.episode_number} thành công!`);
+      const nextEpNum = Math.max(...updatedList.map((e) => e.episode_number || 0)) + 1;
+      setEpisodeFormData({
+        episode_number: nextEpNum,
+        video_url: "",
+      });
+      setEpisodeFormLoading(false);
+    } catch (err) {
+      console.error("Lỗi khi thêm tập phim:", err);
+      setEpisodeError(err.response?.data?.error || "Lỗi khi thêm tập phim mới");
+      setEpisodeFormLoading(false);
+    }
+  };
+
+  // Xóa tập phim
+  const handleDeleteEpisode = async (epId, epNum) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa Tập ${epNum} không?`)) return;
+
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      await axios.delete(`http://localhost:5000/episodes/${epId}`, {
+        headers: { Authorization: token },
+      });
+      setMovieEpisodes((prev) => prev.filter((ep) => ep.id !== epId));
+      setEpisodeSuccess(`🗑️ Đã xóa Tập ${epNum} thành công!`);
+    } catch (err) {
+      console.error("Lỗi khi xóa tập:", err);
+      setEpisodeError(err.response?.data?.error || "Lỗi khi xóa tập phim");
     }
   };
 
@@ -1649,6 +1750,18 @@ function AdminPage() {
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
                               </Link>
+
+                              {/* Quản lý tập phim & link Video.js */}
+                              <button
+                                onClick={() => handleOpenEpisodesModal(movie)}
+                                title="Quản lý tập & link video player"
+                                className="p-2 text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 rounded-lg transition-colors"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                              </button>
 
                               {/* Sửa */}
                               <button
@@ -3545,6 +3658,281 @@ function AdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* MODAL QUẢN LÝ TẬP PHIM & VIDEO STREAM (VIDEO.JS / EPISODES)    */}
+      {/* ============================================================== */}
+      {isEpisodeModalOpen && currentEpisodeMovie && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#181824] border border-zinc-700/80 rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl animate-fade-in">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between pb-4 border-b border-zinc-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 flex items-center justify-center text-xl">
+                  🎞
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                    <span>Quản lý Tập phim & Video Player</span>
+                    <span className="text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-mono">
+                      ID #{currentEpisodeMovie.id}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-zinc-400">
+                    Gán stream URL (MP4 / HLS .m3u8) để phát trên trình phát Video.js
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEpisodeModalOpen(false)}
+                className="p-2 text-zinc-400 hover:text-white rounded-xl hover:bg-zinc-800 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Thông tin nhanh của Phim */}
+            <div className="mt-4 p-3.5 bg-zinc-900/80 border border-zinc-800 rounded-2xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                {currentEpisodeMovie.thumbnail_url && (
+                  <img
+                    src={currentEpisodeMovie.thumbnail_url}
+                    alt={currentEpisodeMovie.title}
+                    className="w-10 h-14 object-cover rounded-lg shadow"
+                  />
+                )}
+                <div>
+                  <h4 className="font-bold text-white text-sm line-clamp-1">
+                    {currentEpisodeMovie.title}
+                  </h4>
+                  <p className="text-xs text-zinc-400">
+                    {currentEpisodeMovie.release_year || "2026"} • ⭐ IMDb {currentEpisodeMovie.imdb_score || "N/A"}
+                  </p>
+                </div>
+              </div>
+
+              <Link
+                to={`/movie/${currentEpisodeMovie.id}`}
+                target="_blank"
+                className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 px-3 py-1.5 rounded-xl font-semibold flex items-center gap-1.5 transition-all"
+              >
+                <span>Xem trên Web</span>
+                <span>↗</span>
+              </Link>
+            </div>
+
+            {/* Alert thông báo */}
+            {episodeError && (
+              <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-xs flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{episodeError}</span>
+              </div>
+            )}
+            {episodeSuccess && (
+              <div className="mt-4 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl text-emerald-400 text-xs flex items-center gap-2">
+                <span>✅</span>
+                <span>{episodeSuccess}</span>
+              </div>
+            )}
+
+            {/* Form thêm tập mới */}
+            <form onSubmit={handleAddEpisode} className="mt-5 p-4 bg-zinc-900/60 border border-zinc-800 rounded-2xl">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+                <span>➕ Thêm tập phim mới</span>
+              </h4>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div className="sm:col-span-1">
+                  <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                    Số tập *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    required
+                    value={episodeFormData.episode_number}
+                    onChange={(e) =>
+                      setEpisodeFormData({ ...episodeFormData, episode_number: e.target.value })
+                    }
+                    className="w-full bg-[#12121a] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="sm:col-span-3">
+                  <label className="block text-[11px] font-semibold text-zinc-400 mb-1">
+                    Link Video Stream URL (.mp4 / .m3u8) *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://domain.com/video.mp4 hoặc stream.m3u8"
+                    value={episodeFormData.video_url}
+                    onChange={(e) =>
+                      setEpisodeFormData({ ...episodeFormData, video_url: e.target.value })
+                    }
+                    className="w-full bg-[#12121a] border border-zinc-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Preset mẫu 1-click */}
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+                <span className="text-zinc-500">Mẫu stream test nhanh:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEpisodeFormData((prev) => ({
+                      ...prev,
+                      video_url: "https://vjs.zencdn.net/v/oceans.mp4",
+                    }))
+                  }
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-lg border border-zinc-700 transition-colors"
+                >
+                  Video.js Oceans (MP4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEpisodeFormData((prev) => ({
+                      ...prev,
+                      video_url: "https://archive.org/download/BigBuckBunny_124/Content/big_buck_bunny_720p_surround.mp4",
+                    }))
+                  }
+                  className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 px-2 py-0.5 rounded-lg border border-zinc-700 transition-colors"
+                >
+                  Big Buck Bunny (MP4)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEpisodeFormData((prev) => ({
+                      ...prev,
+                      video_url: "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
+                    }))
+                  }
+                  className="bg-purple-900/30 hover:bg-purple-900/50 text-purple-300 px-2 py-0.5 rounded-lg border border-purple-500/30 transition-colors"
+                >
+                  Mux Stream (HLS)
+                </button>
+              </div>
+
+              <div className="mt-3 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={episodeFormLoading}
+                  className="px-4 py-2 bg-amber-500 hover:bg-amber-600 active:scale-95 text-black font-bold text-xs rounded-xl shadow-lg shadow-amber-500/20 transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {episodeFormLoading ? (
+                    <>
+                      <div className="w-3.5 h-3.5 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                      <span>Đang lưu...</span>
+                    </>
+                  ) : (
+                    <span>+ Lưu tập mới</span>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* Danh sách các tập hiện có */}
+            <div className="mt-5">
+              <h4 className="text-xs font-bold text-zinc-300 uppercase tracking-wider mb-3 flex items-center justify-between">
+                <span>Danh sách tập phim hiện tại</span>
+                <span className="text-[11px] bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full font-mono">
+                  {movieEpisodes.length} tập
+                </span>
+              </h4>
+
+              {episodesLoading ? (
+                <div className="py-8 text-center text-zinc-400 text-xs flex items-center justify-center gap-2">
+                  <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                  <span>Đang tải danh sách tập...</span>
+                </div>
+              ) : movieEpisodes.length === 0 ? (
+                <div className="py-8 text-center bg-zinc-900/40 border border-zinc-800 rounded-2xl text-zinc-500 text-xs">
+                  🎬 Chưa có tập phim nào. Hãy thêm tập ở form phía trên!
+                </div>
+              ) : (
+                <div className="max-h-60 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                  {movieEpisodes.map((ep) => {
+                    const isHls = ep.video_url?.includes(".m3u8");
+
+                    return (
+                      <div
+                        key={ep.id}
+                        className="p-3 bg-zinc-900/70 border border-zinc-800 hover:border-zinc-700 rounded-xl flex items-center justify-between gap-3 transition-colors"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="w-8 h-8 rounded-lg bg-red-600/20 text-red-400 border border-red-500/30 flex items-center justify-center font-bold text-xs flex-shrink-0">
+                            {ep.episode_number}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-white text-xs font-bold">
+                                Tập {ep.episode_number}
+                              </span>
+                              <span
+                                className={`text-[9px] px-1.5 py-0.2 rounded font-mono font-semibold ${
+                                  isHls
+                                    ? "bg-purple-900/50 text-purple-300 border border-purple-500/30"
+                                    : "bg-blue-900/50 text-blue-300 border border-blue-500/30"
+                                }`}
+                              >
+                                {isHls ? "HLS STREAM" : "MP4"}
+                              </span>
+                            </div>
+                            <p
+                              className="text-[11px] text-zinc-400 truncate max-w-sm sm:max-w-md font-mono"
+                              title={ep.video_url}
+                            >
+                              {ep.video_url}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <a
+                            href={ep.video_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Mở link video trực tiếp"
+                            className="p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-lg text-xs transition-colors"
+                          >
+                            ↗
+                          </a>
+                          <button
+                            onClick={() => handleDeleteEpisode(ep.id, ep.episode_number)}
+                            title="Xóa tập này"
+                            className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-lg text-xs transition-colors"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="mt-6 pt-4 border-t border-zinc-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsEpisodeModalOpen(false)}
+                className="px-5 py-2 rounded-xl text-xs font-semibold bg-zinc-800 hover:bg-zinc-700 text-white transition-colors"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}

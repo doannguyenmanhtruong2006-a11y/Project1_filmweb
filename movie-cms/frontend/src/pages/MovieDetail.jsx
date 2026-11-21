@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
+import VideoPlayer from "../components/VideoPlayer";
 
 function MovieDetail() {
   const { id } = useParams(); // Lấy ID phim từ URL: /movie/5 → id = "5"
@@ -12,6 +13,12 @@ function MovieDetail() {
   const [error, setError] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
+  const [isCinemaMode, setIsCinemaMode] = useState(false);
+
+  // Quản lý Bookmark (Phim yêu thích)
+  const [isBookmarked, setIsBookmarked] = useState(false);
+  const [bookmarkLoading, setBookmarkLoading] = useState(false);
+  const [bookmarkToast, setBookmarkToast] = useState("");
 
   // Trạng thái người dùng đã đăng nhập (lấy từ localStorage)
   const [currentUser, setCurrentUser] = useState(() => {
@@ -27,21 +34,37 @@ function MovieDetail() {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setCurrentUser(null);
+    setIsBookmarked(false);
   };
 
-  // Gọi song song 2 API cùng lúc: chi tiết phim + danh sách tập
+  // Gọi API: chi tiết phim + danh sách tập + kiểm tra bookmark
   useEffect(() => {
     setLoading(true);
     setError(null);
     window.scrollTo(0, 0); // Cuộn về đầu trang
 
+    const token = localStorage.getItem("token");
+    const checkBookmarkPromise = token
+      ? axios
+          .get(`http://localhost:5000/bookmarks/check/${id}`, {
+            headers: { Authorization: token },
+          })
+          .catch(() => ({ data: { is_bookmarked: false } }))
+      : Promise.resolve({ data: { is_bookmarked: false } });
+
     Promise.all([
       axios.get(`http://localhost:5000/movies/${id}`),
       axios.get(`http://localhost:5000/movies/${id}/episodes`),
+      checkBookmarkPromise,
     ])
-      .then(([movieRes, episodesRes]) => {
+      .then(([movieRes, episodesRes, bookmarkRes]) => {
         setMovie(movieRes.data);
-        setEpisodes(episodesRes.data);
+        const epData = episodesRes.data || [];
+        setEpisodes(epData);
+        if (epData.length > 0) {
+          setSelectedEpisode(epData[0]);
+        }
+        setIsBookmarked(bookmarkRes.data?.is_bookmarked || false);
         setLoading(false);
       })
       .catch((err) => {
@@ -50,6 +73,40 @@ function MovieDetail() {
         setLoading(false);
       });
   }, [id]); // Chạy lại khi id thay đổi
+
+  // Xử lý Lưu / Bỏ lưu Bookmark
+  const handleToggleBookmark = async () => {
+    const token = localStorage.getItem("token");
+    if (!token || !currentUser) {
+      if (
+        window.confirm(
+          "Bạn cần đăng nhập để lưu phim vào danh sách yêu thích.\n\nBạn có muốn chuyển đến trang Đăng nhập ngay bây giờ không?"
+        )
+      ) {
+        navigate("/login");
+      }
+      return;
+    }
+
+    try {
+      setBookmarkLoading(true);
+      const res = await axios.post(
+        `http://localhost:5000/bookmarks/toggle/${id}`,
+        {},
+        { headers: { Authorization: token } }
+      );
+
+      const newStatus = res.data.is_bookmarked;
+      setIsBookmarked(newStatus);
+      setBookmarkToast(res.data.message);
+      setTimeout(() => setBookmarkToast(""), 3500);
+      setBookmarkLoading(false);
+    } catch (err) {
+      console.error("Lỗi khi toggle bookmark:", err);
+      alert("Lỗi khi cập nhật bookmark: " + (err.response?.data?.error || err.message));
+      setBookmarkLoading(false);
+    }
+  };
 
   // ===== LOADING SKELETON =====
   if (loading) {
@@ -282,90 +339,183 @@ function MovieDetail() {
                 ▶ Xem Trailer
               </button>
 
-              {/* Nút Xem phim — nếu có tập */}
-              {episodes.length > 0 && (
-                <button
-                  onClick={() => {
+              {/* Nút Xem phim */}
+              <button
+                onClick={() => {
+                  if (!selectedEpisode && episodes.length > 0) {
                     setSelectedEpisode(episodes[0]);
-                    document
-                      .getElementById("episodes-section")
-                      ?.scrollIntoView({ behavior: "smooth" });
-                  }}
-                  className="flex items-center gap-2 bg-white text-black font-bold px-7 py-3 rounded-lg transition-all hover:scale-105 hover:bg-gray-100 text-base"
-                >
-                  🎞 Xem phim
-                </button>
-              )}
+                  }
+                  document
+                    .getElementById("episodes-section")
+                    ?.scrollIntoView({ behavior: "smooth" });
+                }}
+                className="flex items-center gap-2 bg-white text-black font-bold px-7 py-3 rounded-lg transition-all hover:scale-105 hover:bg-gray-100 text-base shadow-lg"
+              >
+                🎞 Xem phim
+              </button>
 
-              {/* Nút Lưu */}
-              <button className="flex items-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white font-bold px-5 py-3 rounded-lg transition-colors text-base border border-zinc-600">
-                + Lưu phim
+              {/* Nút Lưu Bookmark */}
+              <button
+                onClick={handleToggleBookmark}
+                disabled={bookmarkLoading}
+                className={`flex items-center gap-2 font-bold px-6 py-3 rounded-lg transition-all active:scale-95 text-base border ${
+                  isBookmarked
+                    ? "bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/50 shadow-lg shadow-red-600/20"
+                    : "bg-zinc-800 hover:bg-zinc-700 text-white border-zinc-600"
+                }`}
+              >
+                {bookmarkLoading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : isBookmarked ? (
+                  <>
+                    <svg className="w-5 h-5 text-red-500 fill-current" viewBox="0 0 24 24">
+                      <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    <span>✓ Đã lưu yêu thích</span>
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5 text-zinc-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+                    </svg>
+                    <span>+ Lưu vào yêu thích</span>
+                  </>
+                )}
               </button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ===== DANH SÁCH TẬP PHIM ===== */}
-      {episodes.length > 0 && (
-        <section
-          id="episodes-section"
-          className="max-w-6xl mx-auto px-6 mt-14 scroll-mt-20"
-        >
-          <h2 className="text-2xl font-bold mb-5 border-l-4 border-red-600 pl-4">
-            Danh sách tập phim
-          </h2>
-          <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 gap-3">
-            {episodes
-              .slice()
-              .sort((a, b) => a.episode_number - b.episode_number)
-              .map((ep) => (
-                <button
-                  key={ep.id}
-                  onClick={() => setSelectedEpisode(ep)}
-                  className={`py-3 rounded-lg font-bold text-sm transition-all hover:scale-105 ${
-                    selectedEpisode?.id === ep.id
-                      ? "bg-red-600 text-white shadow-lg shadow-red-600/40"
-                      : "bg-zinc-800 hover:bg-zinc-700 text-gray-200 border border-zinc-700"
-                  }`}
-                >
-                  Tập {ep.episode_number}
-                </button>
-              ))}
+      {/* ===== KHU VỰC PHÁT VIDEO PLAYER (VIDEO.JS) & DANH SÁCH TẬP ===== */}
+      <section
+        id="episodes-section"
+        className={`mx-auto px-6 mt-14 scroll-mt-20 transition-all duration-300 ${
+          isCinemaMode ? "max-w-full px-2 sm:px-8" : "max-w-6xl"
+        }`}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-5 border-l-4 border-red-600 pl-4">
+          <div>
+            <h2 className="text-2xl font-bold flex items-center gap-3">
+              <span>Trình phát Video</span>
+              {selectedEpisode && (
+                <span className="text-sm font-semibold bg-red-600/20 text-red-400 border border-red-500/30 px-3 py-1 rounded-full">
+                  Đang phát: Tập {selectedEpisode.episode_number}
+                </span>
+              )}
+            </h2>
+            <p className="text-gray-400 text-xs sm:text-sm mt-1">
+              Phát trực tiếp với Video.js Engine • Hỗ trợ Full HD 1080p, HLS Streaming (.m3u8), tua 10s & chế độ rạp
+            </p>
           </div>
 
-          {/* Video Player khi đã chọn tập */}
-          {selectedEpisode && (
-            <div className="mt-6">
-              <h3 className="text-lg font-semibold mb-3 text-gray-300">
-                Đang xem:{" "}
-                <span className="text-white">
-                  Tập {selectedEpisode.episode_number}
-                </span>
-              </h3>
-              {selectedEpisode.video_url ? (
-                <div className="aspect-video rounded-xl overflow-hidden bg-black shadow-2xl ring-1 ring-white/10">
-                  <video
-                    key={selectedEpisode.id}
-                    controls
-                    autoPlay
-                    className="w-full h-full"
-                    src={selectedEpisode.video_url}
-                  >
-                    Trình duyệt không hỗ trợ phát video.
-                  </video>
-                </div>
-              ) : (
-                <div className="aspect-video rounded-xl bg-zinc-900 flex items-center justify-center border border-zinc-700">
-                  <p className="text-gray-500 text-lg">
-                    🎬 Chưa có link video cho tập này
-                  </p>
-                </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsCinemaMode((prev) => !prev)}
+              className={`text-xs sm:text-sm font-semibold px-4 py-2 rounded-lg border transition-all ${
+                isCinemaMode
+                  ? "bg-amber-500 text-black border-amber-400 font-bold shadow-lg shadow-amber-500/20"
+                  : "bg-zinc-800 hover:bg-zinc-700 text-gray-200 border-zinc-700"
+              }`}
+            >
+              🎬 {isCinemaMode ? "Thu nhỏ chế độ rạp" : "Mở rộng chế độ Rạp phim"}
+            </button>
+          </div>
+        </div>
+
+        {/* Video Player Component */}
+        {selectedEpisode ? (
+          <div className="mb-8">
+            <VideoPlayer
+              key={selectedEpisode.id}
+              src={selectedEpisode.video_url}
+              poster={backdropUrl || posterUrl}
+              title={movie.title}
+              episodeNumber={selectedEpisode.episode_number}
+              hasNextEpisode={Boolean(
+                episodes.find(
+                  (ep) => ep.episode_number === selectedEpisode.episode_number + 1
+                )
               )}
+              onNextEpisode={() => {
+                const next = episodes.find(
+                  (ep) => ep.episode_number === selectedEpisode.episode_number + 1
+                );
+                if (next) setSelectedEpisode(next);
+              }}
+              isCinemaMode={isCinemaMode}
+              onToggleCinemaMode={() => setIsCinemaMode((prev) => !prev)}
+            />
+          </div>
+        ) : (
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-10 text-center mb-8">
+            <p className="text-gray-400 mb-4">Chưa có tập phim chính thức cho phim này.</p>
+            <button
+              onClick={() =>
+                setSelectedEpisode({
+                  id: "demo",
+                  episode_number: 1,
+                  video_url: "https://vjs.zencdn.net/v/oceans.mp4",
+                })
+              }
+              className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 py-2.5 rounded-lg transition-colors"
+            >
+              🎬 Trải nghiệm Video.js Player (Bản Demo)
+            </button>
+          </div>
+        )}
+
+        {/* Danh sách các tập phim */}
+        {episodes.length > 0 && (
+          <div className="bg-zinc-900/60 border border-zinc-800/80 rounded-2xl p-6 backdrop-blur-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-200 flex items-center gap-2">
+                <span>🎞 Chọn tập phim ({episodes.length} tập)</span>
+              </h3>
+              <span className="text-xs text-gray-400">
+                Click vào tập để chuyển video ngay lập tức
+              </span>
             </div>
-          )}
-        </section>
-      )}
+
+            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
+              {[...episodes]
+                .sort((a, b) => a.episode_number - b.episode_number)
+                .map((ep) => {
+                  const isActive = selectedEpisode?.id === ep.id;
+                  const isHls = ep.video_url && ep.video_url.includes(".m3u8");
+
+                  return (
+                    <button
+                      key={ep.id}
+                      onClick={() => setSelectedEpisode(ep)}
+                      className={`relative p-3.5 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center gap-1 hover:scale-105 active:scale-95 ${
+                        isActive
+                          ? "bg-red-600 text-white shadow-xl shadow-red-600/40 ring-2 ring-red-400"
+                          : "bg-zinc-800/90 hover:bg-zinc-700 text-gray-200 border border-zinc-700/80"
+                      }`}
+                    >
+                      <div className="flex items-center gap-1">
+                        {isActive && <span className="animate-pulse">▶</span>}
+                        <span>Tập {ep.episode_number}</span>
+                      </div>
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider font-semibold ${
+                          isActive
+                            ? "bg-black/30 text-white"
+                            : isHls
+                            ? "bg-purple-900/50 text-purple-300 border border-purple-500/30"
+                            : "bg-blue-900/50 text-blue-300 border border-blue-500/30"
+                        }`}
+                      >
+                        {isHls ? "HLS" : "1080P"}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* ===== NỘI DUNG ĐẦY ĐỦ ===== */}
       {movie.description && (
@@ -425,6 +575,14 @@ function MovieDetail() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast thông báo Bookmark */}
+      {bookmarkToast && (
+        <div className="fixed bottom-8 right-8 z-50 bg-zinc-900 border border-zinc-700 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-fade-in border-amber-500/30">
+          <span className="text-xl">{isBookmarked ? "💖" : "🗑️"}</span>
+          <span className="text-sm font-semibold">{bookmarkToast}</span>
         </div>
       )}
     </div>

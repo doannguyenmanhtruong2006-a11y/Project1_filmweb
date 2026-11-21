@@ -69,6 +69,122 @@ router.get("/users/trash", verifyToken, verifyAdmin, async (req, res) => {
   }
 });
 
+// ====================================================================
+// CÁC API DÀNH RIÊNG CHO NGƯỜI DÙNG ĐĂNG NHẬP (USER PROFILE & SECURITY)
+// ====================================================================
+
+// 2.1. Lấy thông tin cá nhân của chính mình (Ai đã đăng nhập cũng dùng được)
+// GET /users/me
+router.get("/users/me", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const user = await prisma.users.findUnique({
+      where: { id: userId },
+      include: {
+        _count: {
+          select: { bookmarks: true },
+        },
+      },
+    });
+
+    if (!user || user.is_deleted) {
+      return res.status(404).json({ error: "Tài khoản không tồn tại hoặc đã bị khóa!" });
+    }
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role || "USER",
+      created_at: user.created_at,
+      bookmarks_count: user._count?.bookmarks || 0,
+    });
+  } catch (error) {
+    console.error("Lỗi khi lấy thông tin cá nhân:", error);
+    res.status(500).json({ error: "Lỗi hệ thống khi lấy thông tin cá nhân" });
+  }
+});
+
+// 2.2. Cập nhật thông tin cá nhân (Tên hiển thị username)
+// PUT /users/profile
+router.put("/users/profile", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { username } = req.body;
+
+    if (!username || !username.trim()) {
+      return res.status(400).json({ error: "Tên hiển thị không được để trống!" });
+    }
+
+    const updatedUser = await prisma.users.update({
+      where: { id: userId },
+      data: { username: username.trim() },
+    });
+
+    res.json({
+      message: "Cập nhật thông tin cá nhân thành công!",
+      user: {
+        id: updatedUser.id,
+        username: updatedUser.username,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        created_at: updatedUser.created_at,
+      },
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật profile:", error);
+    res.status(500).json({ error: "Lỗi hệ thống khi cập nhật thông tin cá nhân" });
+  }
+});
+
+// 2.3. Tự đổi mật khẩu tài khoản
+// PUT /users/change-password
+router.put("/users/change-password", verifyToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        error: "Vui lòng nhập mật khẩu hiện tại và mật khẩu mới!",
+      });
+    }
+
+    if (newPassword.length < 3) {
+      return res.status(400).json({
+        error: "Mật khẩu mới phải có ít nhất 3 ký tự!",
+      });
+    }
+
+    const user = await prisma.users.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: "Tài khoản không tồn tại!" });
+    }
+
+    // So khớp mật khẩu cũ
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ error: "Mật khẩu hiện tại không chính xác!" });
+    }
+
+    // Hash mật khẩu mới bằng bcrypt
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    await prisma.users.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    res.json({
+      message: "Đổi mật khẩu thành công! Bạn có thể sử dụng mật khẩu mới cho các lần đăng nhập tiếp theo.",
+    });
+  } catch (error) {
+    console.error("Lỗi khi đổi mật khẩu:", error);
+    res.status(500).json({ error: "Lỗi hệ thống khi đổi mật khẩu" });
+  }
+});
+
 // 3. Thêm tài khoản người dùng mới
 router.post("/users", verifyToken, verifyAdmin, async (req, res) => {
   try {

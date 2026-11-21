@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import VideoPlayer from "../components/VideoPlayer";
+import ProfileModal from "../components/ProfileModal";
 
 function MovieDetail() {
   const { id } = useParams(); // Lấy ID phim từ URL: /movie/5 → id = "5"
@@ -14,6 +15,7 @@ function MovieDetail() {
   const [showTrailer, setShowTrailer] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
 
   // Quản lý Bookmark (Phim yêu thích)
   const [isBookmarked, setIsBookmarked] = useState(false);
@@ -108,6 +110,18 @@ function MovieDetail() {
     }
   };
 
+  // Xử lý Tăng lượt xem khi xem video
+  const handleViewCount = async () => {
+    try {
+      const res = await axios.post(`http://localhost:5000/movies/${id}/view`);
+      if (res.data?.view_count !== undefined) {
+        setMovie((prev) => (prev ? { ...prev, view_count: res.data.view_count } : prev));
+      }
+    } catch (err) {
+      console.warn("Lỗi khi cập nhật lượt xem:", err);
+    }
+  };
+
   // ===== LOADING SKELETON =====
   if (loading) {
     return (
@@ -186,14 +200,20 @@ function MovieDetail() {
                 </Link>
               )}
 
-              <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/60 px-3 py-1 rounded-full">
-                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px]">
+              <button
+                type="button"
+                onClick={() => setShowProfileModal(true)}
+                title="Xem hồ sơ & Đổi mật khẩu"
+                className="flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 hover:border-zinc-500 px-3 py-1 rounded-full transition-all group cursor-pointer"
+              >
+                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px] group-hover:scale-105 transition-transform">
                   {currentUser.username ? currentUser.username.slice(0, 2).toUpperCase() : "U"}
                 </div>
-                <span className="text-xs font-semibold text-zinc-200 max-w-[110px] truncate">
+                <span className="text-xs font-semibold text-zinc-200 group-hover:text-white max-w-[110px] truncate">
                   {currentUser.username || currentUser.email}
                 </span>
-              </div>
+                <span className="text-[10px] text-zinc-400 group-hover:text-zinc-200">⚙️</span>
+              </button>
 
               <button
                 onClick={handleLogout}
@@ -445,6 +465,7 @@ function MovieDetail() {
               }}
               isCinemaMode={isCinemaMode}
               onToggleCinemaMode={() => setIsCinemaMode((prev) => !prev)}
+              onViewCount={handleViewCount}
             />
           </div>
         ) : (
@@ -585,6 +606,14 @@ function MovieDetail() {
           <span className="text-sm font-semibold">{bookmarkToast}</span>
         </div>
       )}
+
+      {/* Modal Hồ sơ Cá nhân & Đổi mật khẩu */}
+      <ProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+        currentUser={currentUser}
+        onUserUpdated={(updated) => setCurrentUser(updated)}
+      />
     </div>
   );
 }

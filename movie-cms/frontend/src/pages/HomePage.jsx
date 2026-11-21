@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import axios from "axios";
+import ProfileModal from "../components/ProfileModal";
 
 function HomePage() {
     const navigate = useNavigate();
@@ -13,6 +14,7 @@ function HomePage() {
     const [bookmarkedList, setBookmarkedList] = useState([]);
     const [bookmarkedIds, setBookmarkedIds] = useState(new Set());
     const [showBookmarksModal, setShowBookmarksModal] = useState(false);
+    const [showProfileModal, setShowProfileModal] = useState(false);
     const [toastMessage, setToastMessage] = useState("");
 
     // Trạng thái người dùng đã đăng nhập (lấy từ localStorage)
@@ -203,14 +205,20 @@ function HomePage() {
                                 </Link>
                             )}
 
-                            <div className="flex items-center gap-2 bg-zinc-900/80 border border-zinc-700/60 px-3 py-1 rounded-full">
-                                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px]">
+                            <button
+                                type="button"
+                                onClick={() => setShowProfileModal(true)}
+                                title="Xem hồ sơ & Đổi mật khẩu"
+                                className="flex items-center gap-2 bg-zinc-900/80 hover:bg-zinc-800 border border-zinc-700/60 hover:border-zinc-500 px-3 py-1 rounded-full transition-all group cursor-pointer"
+                            >
+                                <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-amber-500 to-red-500 flex items-center justify-center font-bold text-white text-[11px] group-hover:scale-105 transition-transform">
                                     {currentUser.username ? currentUser.username.slice(0, 2).toUpperCase() : "U"}
                                 </div>
-                                <span className="text-xs font-semibold text-zinc-200 max-w-[110px] truncate">
+                                <span className="text-xs font-semibold text-zinc-200 group-hover:text-white max-w-[110px] truncate">
                                     {currentUser.username || currentUser.email}
                                 </span>
-                            </div>
+                                <span className="text-[10px] text-zinc-400 group-hover:text-zinc-200">⚙️</span>
+                            </button>
 
                             <button
                                 onClick={handleLogout}
@@ -571,6 +579,14 @@ function HomePage() {
                     <span className="text-sm font-semibold">{toastMessage}</span>
                 </div>
             )}
+
+            {/* Modal Hồ sơ Cá nhân & Đổi mật khẩu */}
+            <ProfileModal
+                isOpen={showProfileModal}
+                onClose={() => setShowProfileModal(false)}
+                currentUser={currentUser}
+                onUserUpdated={(updated) => setCurrentUser(updated)}
+            />
         </div>
     );
 }

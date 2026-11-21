@@ -95,6 +95,37 @@ router.get("/movies/:id", async (req, res) => {
   }
 });
 
+// API: Tăng lượt xem cho phim khi người xem thưởng thức video
+// POST /movies/:id/view (Công khai, tự động gọi khi video được phát)
+router.post("/movies/:id/view", async (req, res) => {
+  try {
+    const movieId = parseInt(req.params.id);
+    if (isNaN(movieId)) {
+      return res.status(400).json({ error: "ID phim không hợp lệ" });
+    }
+
+    const updatedMovie = await prisma.movies.update({
+      where: { id: movieId },
+      data: {
+        view_count: { increment: 1 },
+      },
+      select: {
+        id: true,
+        title: true,
+        view_count: true,
+      },
+    });
+
+    res.json({
+      message: `Đã tăng lượt xem cho phim "${updatedMovie.title}"!`,
+      view_count: updatedMovie.view_count,
+    });
+  } catch (error) {
+    console.error("Lỗi khi cập nhật lượt xem:", error);
+    res.status(500).json({ error: "Lỗi hệ thống khi cập nhật lượt xem phim" });
+  }
+});
+
 // 3. API: Thêm phim mới (Phải là Admin - Hỗ trợ gán Thể loại)
 router.post("/movies", verifyToken, verifyAdmin, async (req, res) => {
   try {

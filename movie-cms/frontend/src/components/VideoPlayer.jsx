@@ -16,9 +16,11 @@ export function VideoPlayer({
   onNextEpisode,
   isCinemaMode = false,
   onToggleCinemaMode,
+  onViewCount,
 }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
+  const viewRecordedRef = useRef(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loadError, setLoadError] = useState(null);
 
@@ -82,6 +84,15 @@ export function VideoPlayer({
       // Event listeners
       player.on("play", () => setIsPlaying(true));
       player.on("pause", () => setIsPlaying(false));
+      player.on("timeupdate", () => {
+        // Tự động ghi nhận lượt xem khi người dùng xem từ 5 giây trở lên
+        if (!viewRecordedRef.current && player.currentTime() >= 5) {
+          viewRecordedRef.current = true;
+          if (onViewCount) {
+            onViewCount();
+          }
+        }
+      });
       player.on("ended", () => {
         setIsPlaying(false);
         if (hasNextEpisode && onNextEpisode) {
@@ -115,6 +126,7 @@ export function VideoPlayer({
   useEffect(() => {
     const player = playerRef.current;
     if (player && !player.isDisposed() && src) {
+      viewRecordedRef.current = false;
       setLoadError(null);
       const type = getVideoType(src);
       player.pause();

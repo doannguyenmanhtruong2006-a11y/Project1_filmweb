@@ -14,6 +14,7 @@ function MovieDetail() {
   const [error, setError] = useState(null);
   const [showTrailer, setShowTrailer] = useState(false);
   const [selectedEpisode, setSelectedEpisode] = useState(null);
+  const [initialSeekTime, setInitialSeekTime] = useState(0);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
 
@@ -45,6 +46,18 @@ function MovieDetail() {
     setError(null);
     window.scrollTo(0, 0); // Cuộn về đầu trang
 
+    // Kiểm tra lịch sử xem trong localStorage cho phim này
+    let savedProgress = null;
+    try {
+      const historyRaw = localStorage.getItem("filmweb_watch_history");
+      if (historyRaw) {
+        const historyList = JSON.parse(historyRaw);
+        savedProgress = historyList.find((h) => String(h.movieId) === String(id));
+      }
+    } catch (e) {
+      console.warn("Lỗi đọc lịch sử xem:", e);
+    }
+
     const token = localStorage.getItem("token");
     const checkBookmarkPromise = token
       ? axios
@@ -63,9 +76,22 @@ function MovieDetail() {
         setMovie(movieRes.data);
         const epData = episodesRes.data || [];
         setEpisodes(epData);
-        if (epData.length > 0) {
+
+        // Khôi phục tập phim & thời gian đã xem trước đó
+        if (savedProgress && epData.length > 0) {
+          const matchedEp = epData.find(
+            (ep) => ep.id === savedProgress.episodeId || ep.episode_number === savedProgress.episodeNumber
+          );
+          if (matchedEp) {
+            setSelectedEpisode(matchedEp);
+            setInitialSeekTime(savedProgress.currentTime || 0);
+          } else {
+            setSelectedEpisode(epData[0]);
+          }
+        } else if (epData.length > 0) {
           setSelectedEpisode(epData[0]);
         }
+
         setIsBookmarked(bookmarkRes.data?.is_bookmarked || false);
         setLoading(false);
       })
@@ -447,11 +473,14 @@ function MovieDetail() {
         {selectedEpisode ? (
           <div className="mb-8">
             <VideoPlayer
-              key={selectedEpisode.id}
+              key={`${selectedEpisode.id}-${initialSeekTime}`}
               src={selectedEpisode.video_url}
               poster={backdropUrl || posterUrl}
               title={movie.title}
+              movieId={Number(id)}
+              episodeId={selectedEpisode.id}
               episodeNumber={selectedEpisode.episode_number}
+              initialTime={initialSeekTime}
               hasNextEpisode={Boolean(
                 episodes.find(
                   (ep) => ep.episode_number === selectedEpisode.episode_number + 1
@@ -461,7 +490,10 @@ function MovieDetail() {
                 const next = episodes.find(
                   (ep) => ep.episode_number === selectedEpisode.episode_number + 1
                 );
-                if (next) setSelectedEpisode(next);
+                if (next) {
+                  setSelectedEpisode(next);
+                  setInitialSeekTime(0);
+                }
               }}
               isCinemaMode={isCinemaMode}
               onToggleCinemaMode={() => setIsCinemaMode((prev) => !prev)}
@@ -508,7 +540,10 @@ function MovieDetail() {
                   return (
                     <button
                       key={ep.id}
-                      onClick={() => setSelectedEpisode(ep)}
+                      onClick={() => {
+                        setSelectedEpisode(ep);
+                        setInitialSeekTime(0);
+                      }}
                       className={`relative p-3.5 rounded-xl font-bold text-sm transition-all flex flex-col items-center justify-center gap-1 hover:scale-105 active:scale-95 ${
                         isActive
                           ? "bg-red-600 text-white shadow-xl shadow-red-600/40 ring-2 ring-red-400"

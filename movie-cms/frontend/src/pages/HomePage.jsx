@@ -6,9 +6,19 @@ import ProfileModal from "../components/ProfileModal";
 function HomePage() {
     const navigate = useNavigate();
     const [movies, setMovies] = useState([]);
+    const [genres, setGenres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [currentSlide, setCurrentSlide] = useState(0);
     const [currentPage, setCurrentPage] = useState(1);
+
+    // Lịch sử xem (Continue Watching) từ localStorage
+    const [watchHistory, setWatchHistory] = useState([]);
+
+    // Bộ lọc & Tìm kiếm đa tiêu chí
+    const [searchKeyword, setSearchKeyword] = useState("");
+    const [selectedGenre, setSelectedGenre] = useState("all");
+    const [selectedYear, setSelectedYear] = useState("all");
+    const [sortBy, setSortBy] = useState("newest"); // newest | views | imdb | year_desc
 
     // Quản lý Bookmark (Phim yêu thích)
     const [bookmarkedList, setBookmarkedList] = useState([]);
@@ -27,6 +37,41 @@ function HomePage() {
         }
     });
 
+    // Tải lịch sử xem từ localStorage khi mount
+    const loadWatchHistory = () => {
+        try {
+            const raw = localStorage.getItem("filmweb_watch_history");
+            if (raw) {
+                setWatchHistory(JSON.parse(raw));
+            } else {
+                setWatchHistory([]);
+            }
+        } catch (e) {
+            console.warn("Lỗi tải lịch sử xem:", e);
+        }
+    };
+
+    useEffect(() => {
+        loadWatchHistory();
+    }, []);
+
+    // Xóa 1 phim khỏi lịch sử xem
+    const handleRemoveHistory = (e, movieId) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const updated = watchHistory.filter((item) => item.movieId !== movieId);
+        setWatchHistory(updated);
+        localStorage.setItem("filmweb_watch_history", JSON.stringify(updated));
+    };
+
+    // Xóa toàn bộ lịch sử xem
+    const handleClearAllHistory = () => {
+        if (window.confirm("Bạn có chắc muốn xóa toàn bộ lịch sử xem không?")) {
+            localStorage.removeItem("filmweb_watch_history");
+            setWatchHistory([]);
+        }
+    };
+
     // Xử lý Đăng xuất
     const handleLogout = () => {
         localStorage.removeItem("token");
@@ -35,6 +80,18 @@ function HomePage() {
         setBookmarkedList([]);
         setBookmarkedIds(new Set());
     };
+
+    // Lấy danh sách thể loại từ backend
+    useEffect(() => {
+        axios
+            .get("http://localhost:5000/genres")
+            .then((res) => {
+                setGenres(res.data || []);
+            })
+            .catch((err) => {
+                console.warn("Không thể tải danh sách thể loại:", err);
+            });
+    }, []);
 
     // Lấy danh sách bookmark của user
     const fetchBookmarks = () => {
@@ -147,15 +204,71 @@ function HomePage() {
         return () => clearInterval(timer);
     }, [featuredMovies.length]);
 
+    // Danh sách năm phát hành có trong cơ sở dữ liệu
+    const availableYears = Array.from(
+        new Set(movies.map((m) => m.release_year).filter(Boolean))
+    ).sort((a, b) => b - a);
+
+    // Lọc và sắp xếp phim đa tiêu chí (Client-side)
+    const filteredMovies = movies
+        .filter((movie) => {
+            // Lọc theo từ khóa tìm kiếm (tên phim, đạo diễn)
+            if (searchKeyword.trim()) {
+                const keyword = searchKeyword.toLowerCase().trim();
+                const matchTitle = movie.title?.toLowerCase().includes(keyword);
+                const matchDirector = movie.director?.toLowerCase().includes(keyword);
+                if (!matchTitle && !matchDirector) return false;
+            }
+
+            // Lọc theo thể loại
+            if (selectedGenre !== "all") {
+                const hasGenre = movie.genres?.some(
+                    (g) => String(g.id) === String(selectedGenre) || g.name === selectedGenre
+                );
+                if (!hasGenre) return false;
+            }
+
+            // Lọc theo năm phát hành
+            if (selectedYear !== "all") {
+                if (String(movie.release_year) !== String(selectedYear)) return false;
+            }
+
+            return true;
+        })
+        .sort((a, b) => {
+            if (sortBy === "views") return (b.view_count || 0) - (a.view_count || 0);
+            if (sortBy === "imdb") return (b.imdb_score || 0) - (a.imdb_score || 0);
+            if (sortBy === "year_desc") return (b.release_year || 0) - (a.release_year || 0);
+            return b.id - a.id; // Mặc định: Phim mới thêm trước
+        });
+
+    // Reset về trang 1 khi thay đổi bất kỳ bộ lọc nào
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchKeyword, selectedGenre, selectedYear, sortBy]);
+
     // Cấu hình phân trang: 20 phim / 1 trang
     const moviesPerPage = 20;
-    const totalPages =
-        movies.length > 0 ? Math.ceil(movies.length / moviesPerPage) : 1;
+    const totalPages = Math.max(1, Math.ceil(filteredMovies.length / moviesPerPage));
 
     // Lấy danh sách phim cho trang hiện tại
     const indexOfLastMovie = currentPage * moviesPerPage;
     const indexOfFirstMovie = indexOfLastMovie - moviesPerPage;
-    const currentMovies = movies.slice(indexOfFirstMovie, indexOfLastMovie);
+    const currentMovies = filteredMovies.slice(indexOfFirstMovie, indexOfLastMovie);
+
+    // Đặt lại tất cả bộ lọc về mặc định
+    const handleResetFilters = () => {
+        setSearchKeyword("");
+        setSelectedGenre("all");
+        setSelectedYear("all");
+        setSortBy("newest");
+    };
+
+    const hasActiveFilters =
+        searchKeyword.trim() !== "" ||
+        selectedGenre !== "all" ||
+        selectedYear !== "all" ||
+        sortBy !== "newest";
 
     // Chuyển trang và cuộn mượt lên đầu danh sách phim
     const handlePageChange = (newPage) => {
@@ -175,11 +288,23 @@ function HomePage() {
                     FILMWEB
                 </h1>
                 <div className="flex items-center gap-4">
-                    <input
-                        type="text"
-                        placeholder="Tìm kiếm phim..."
-                        className="bg-black/60 border border-gray-600 rounded px-4 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-red-500 transition-colors w-64"
-                    />
+                    <div className="relative">
+                        <input
+                            type="text"
+                            value={searchKeyword}
+                            onChange={(e) => setSearchKeyword(e.target.value)}
+                            placeholder="Tìm kiếm phim, đạo diễn..."
+                            className="bg-black/60 border border-gray-600 rounded px-4 py-2 text-sm text-white placeholder-gray-400 focus:outline-none focus:border-red-500 transition-colors w-64 pr-8"
+                        />
+                        {searchKeyword && (
+                            <button
+                                onClick={() => setSearchKeyword("")}
+                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white text-xs"
+                            >
+                                ✕
+                            </button>
+                        )}
+                    </div>
 
                     {currentUser ? (
                         <div className="flex items-center gap-3">
@@ -273,12 +398,18 @@ function HomePage() {
                             : "Khám phá kho phim khổng lồ với hàng trăm bộ phim hấp dẫn."}
                     </p>
                     <div className="flex gap-3">
-                        <button className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded hover:bg-gray-200 transition-colors">
+                        <Link
+                            to={heroMovie ? `/movie/${heroMovie.id}` : "#"}
+                            className="flex items-center gap-2 bg-white text-black font-bold px-6 py-3 rounded hover:bg-gray-200 transition-colors"
+                        >
                             ▶ Xem ngay
-                        </button>
-                        <button className="flex items-center gap-2 bg-gray-600/70 text-white font-bold px-6 py-3 rounded hover:bg-gray-600 transition-colors">
+                        </Link>
+                        <Link
+                            to={heroMovie ? `/movie/${heroMovie.id}` : "#"}
+                            className="flex items-center gap-2 bg-gray-600/70 text-white font-bold px-6 py-3 rounded hover:bg-gray-600 transition-colors"
+                        >
                             ℹ Thông tin thêm
-                        </button>
+                        </Link>
                     </div>
 
                     {/* Chấm chỉ slide hiện tại */}
@@ -299,13 +430,162 @@ function HomePage() {
                 </div>
             </section>
 
-            {/* ===== DANH SÁCH PHIM ===== */}
-            <main id="movie-section" className="px-6 pb-16 -mt-10 relative z-10 scroll-mt-20">
-                <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-2xl font-bold">🔥 Phim phổ biến</h3>
+            {/* ===== TIẾP TỤC XEM (CONTINUE WATCHING) ===== */}
+            {watchHistory.length > 0 && (
+                <section className="px-6 pb-6 relative z-10 -mt-6">
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-xl sm:text-2xl font-bold flex items-center gap-2 text-white">
+                            <span className="text-red-500">▶</span>
+                            <span>Tiếp tục xem ({watchHistory.length})</span>
+                        </h3>
+                        <button
+                            onClick={handleClearAllHistory}
+                            className="text-xs text-zinc-400 hover:text-red-400 transition-colors cursor-pointer"
+                        >
+                            Xóa lịch sử
+                        </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                        {watchHistory.map((item) => (
+                            <div
+                                key={item.movieId}
+                                className="group relative bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden hover:border-zinc-700 transition-all flex flex-col shadow-lg"
+                            >
+                                <Link
+                                    to={`/movie/${item.movieId}`}
+                                    className="relative aspect-video overflow-hidden bg-zinc-800 block"
+                                >
+                                    <img
+                                        src={item.poster || "https://via.placeholder.com/300x170?text=FilmWeb"}
+                                        alt={item.title}
+                                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 group-hover:bg-black/20 flex items-center justify-center transition-colors">
+                                        <div className="w-9 h-9 rounded-full bg-red-600/90 text-white flex items-center justify-center text-xs shadow-lg group-hover:scale-110 transition-transform">
+                                            ▶
+                                        </div>
+                                    </div>
+                                    {/* Progress bar */}
+                                    <div className="absolute bottom-0 left-0 right-0 h-1.5 bg-zinc-700/80">
+                                        <div
+                                            className="h-full bg-red-600 rounded-r"
+                                            style={{ width: `${Math.min(100, Math.max(5, item.percent || 0))}%` }}
+                                        />
+                                    </div>
+                                </Link>
+                                <div className="p-3 flex-1 flex flex-col justify-between">
+                                    <div className="flex items-start justify-between gap-1">
+                                        <Link
+                                            to={`/movie/${item.movieId}`}
+                                            className="font-bold text-xs text-white line-clamp-1 hover:text-red-400 transition-colors"
+                                        >
+                                            {item.title}
+                                        </Link>
+                                        <button
+                                            onClick={(e) => handleRemoveHistory(e, item.movieId)}
+                                            title="Xóa khỏi lịch sử"
+                                            className="text-zinc-500 hover:text-red-400 text-xs p-0.5 rounded transition-colors"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+                                    <div className="flex items-center justify-between text-[11px] text-zinc-400 mt-2">
+                                        <span className="bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-300 font-medium">
+                                            Tập {item.episodeNumber || 1}
+                                        </span>
+                                        <span className="text-red-400 font-semibold">{item.percent || 0}%</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+            )}
+
+            {/* ===== DANH SÁCH PHIM & BỘ LỌC ===== */}
+            <main id="movie-section" className="px-6 pb-16 relative z-10 scroll-mt-20">
+                {/* Header danh sách & Thống kê */}
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-2xl font-bold flex items-center gap-2">
+                        <span>🔥 Khám phá phim</span>
+                    </h3>
                     <span className="text-sm text-gray-400">
-                        Trang {currentPage} / {totalPages} ({movies.length} phim)
+                        Trang {currentPage} / {totalPages} ({filteredMovies.length} phim)
                     </span>
+                </div>
+
+                {/* ===== THANH BỘ LỌC ĐA TIÊU CHÍ (MULTI-CRITERIA FILTER BAR) ===== */}
+                <div className="bg-zinc-900/80 border border-zinc-800/80 rounded-2xl p-4 sm:p-5 mb-8 backdrop-blur-md shadow-xl flex flex-wrap items-center justify-between gap-4">
+                    <div className="flex flex-wrap items-center gap-3">
+                        <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                            <span>🔍</span>
+                            <span>Bộ lọc:</span>
+                        </span>
+
+                        {/* Lọc Thể loại */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-zinc-400">Thể loại:</label>
+                            <select
+                                value={selectedGenre}
+                                onChange={(e) => setSelectedGenre(e.target.value)}
+                                className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-medium rounded-lg px-3 py-2 focus:outline-none focus:border-red-500 cursor-pointer"
+                            >
+                                <option value="all">Tất cả thể loại</option>
+                                {genres.map((g) => (
+                                    <option key={g.id} value={g.id}>
+                                        {g.name} {g.movie_count ? `(${g.movie_count})` : ""}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Lọc Năm phát hành */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-zinc-400">Năm:</label>
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-medium rounded-lg px-3 py-2 focus:outline-none focus:border-red-500 cursor-pointer"
+                            >
+                                <option value="all">Tất cả các năm</option>
+                                {availableYears.map((year) => (
+                                    <option key={year} value={year}>
+                                        {year}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Sắp xếp */}
+                        <div className="flex items-center gap-1.5">
+                            <label className="text-xs text-zinc-400">Sắp xếp:</label>
+                            <select
+                                value={sortBy}
+                                onChange={(e) => setSortBy(e.target.value)}
+                                className="bg-zinc-800 border border-zinc-700 text-zinc-200 text-xs font-medium rounded-lg px-3 py-2 focus:outline-none focus:border-red-500 cursor-pointer"
+                            >
+                                <option value="newest">Mới cập nhật</option>
+                                <option value="views">Lượt xem nhiều nhất</option>
+                                <option value="imdb">Điểm IMDb cao nhất</option>
+                                <option value="year_desc">Năm phát hành mới nhất</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Thống kê kết quả & Nút xóa lọc */}
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-zinc-300">
+                            Tìm thấy <strong className="text-red-500">{filteredMovies.length}</strong> phim
+                        </span>
+                        {hasActiveFilters && (
+                            <button
+                                onClick={handleResetFilters}
+                                className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 border border-red-500/30 font-semibold px-2.5 py-1.5 rounded-lg transition-colors flex items-center gap-1 cursor-pointer"
+                            >
+                                <span>✕ Đặt lại</span>
+                            </button>
+                        )}
+                    </div>
                 </div>
 
                 {/* Loading skeleton */}
@@ -317,6 +597,20 @@ function HomePage() {
                                 className="bg-gray-800 rounded-lg aspect-[2/3] animate-pulse"
                             />
                         ))}
+                    </div>
+                ) : filteredMovies.length === 0 ? (
+                    <div className="text-center py-20 bg-zinc-900/40 rounded-2xl border border-zinc-800">
+                        <div className="text-5xl mb-3">🎬</div>
+                        <h4 className="text-lg font-bold text-white mb-2">Không tìm thấy phim phù hợp</h4>
+                        <p className="text-sm text-zinc-400 mb-5">
+                            Thử thay đổi thể loại, năm phát hành hoặc từ khóa tìm kiếm của bạn.
+                        </p>
+                        <button
+                            onClick={handleResetFilters}
+                            className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs px-5 py-2.5 rounded-lg transition-colors"
+                        >
+                            Xóa bộ lọc
+                        </button>
                     </div>
                 ) : (
                     <>
@@ -351,12 +645,15 @@ function HomePage() {
                                             {movie.title}
                                         </h4>
 
-                                        {/* Năm phát hành */}
-                                        {movie.release_year && (
-                                            <span className="text-gray-300 text-xs">
-                                                {movie.release_year}
-                                            </span>
-                                        )}
+                                        {/* Năm phát hành & Lượt xem */}
+                                        <div className="flex items-center gap-2 text-xs text-gray-300">
+                                            {movie.release_year && (
+                                                <span>{movie.release_year}</span>
+                                            )}
+                                            {movie.view_count !== undefined && (
+                                                <span>• 👁 {movie.view_count}</span>
+                                            )}
+                                        </div>
 
                                         {/* Nút hành động */}
                                         <div className="flex gap-2 mt-3">
@@ -386,6 +683,13 @@ function HomePage() {
                                         </div>
                                     )}
 
+                                    {/* Badge điểm IMDb ở góc trên bên trái (nếu chưa bookmark) hoặc bên cạnh */}
+                                    {movie.imdb_score && (
+                                        <div className="absolute top-2 left-2 z-0 bg-black/70 backdrop-blur-sm text-amber-400 text-[10px] font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
+                                            ★ {movie.imdb_score}
+                                        </div>
+                                    )}
+
                                     {/* Badge năm - hiện mặc định, ẩn khi hover */}
                                     {movie.release_year && (
                                         <div className="absolute top-2 right-2 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded group-hover:opacity-0 transition-opacity">
@@ -411,21 +715,42 @@ function HomePage() {
                                     ◀ Trước
                                 </button>
 
-                                {/* Các nút số trang 1, 2, 3, 4, 5, 6 */}
-                                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                                    (pageNum) => (
-                                        <button
-                                            key={pageNum}
-                                            onClick={() => handlePageChange(pageNum)}
-                                            className={`w-10 h-10 rounded font-bold text-sm transition-all duration-200 ${currentPage === pageNum
-                                                    ? "bg-red-600 text-white shadow-lg shadow-red-600/40 scale-105"
-                                                    : "bg-zinc-800 text-gray-300 hover:bg-zinc-700 hover:text-white"
-                                                }`}
-                                        >
-                                            {pageNum}
-                                        </button>
-                                    )
-                                )}
+                                {/* Các nút số trang */}
+                                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                    .filter((p) => {
+                                        // Show first, last, and pages around current page
+                                        return (
+                                            p === 1 ||
+                                            p === totalPages ||
+                                            Math.abs(p - currentPage) <= 2
+                                        );
+                                    })
+                                    .reduce((acc, p, idx, arr) => {
+                                        // Add ellipsis if gap > 1
+                                        if (idx > 0 && p - arr[idx - 1] > 1) {
+                                            acc.push("...");
+                                        }
+                                        acc.push(p);
+                                        return acc;
+                                    }, [])
+                                    .map((item, idx) =>
+                                        item === "..." ? (
+                                            <span key={`ellipsis-${idx}`} className="text-zinc-600 px-1">
+                                                ...
+                                            </span>
+                                        ) : (
+                                            <button
+                                                key={item}
+                                                onClick={() => handlePageChange(item)}
+                                                className={`w-10 h-10 rounded font-bold text-sm transition-all duration-200 ${currentPage === item
+                                                        ? "bg-red-600 text-white shadow-lg shadow-red-600/40 scale-105"
+                                                        : "bg-zinc-800 text-gray-300 hover:bg-zinc-700 hover:text-white"
+                                                    }`}
+                                            >
+                                                {item}
+                                            </button>
+                                        )
+                                    )}
 
                                 {/* Nút Trang sau */}
                                 <button

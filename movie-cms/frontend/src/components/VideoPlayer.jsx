@@ -11,18 +11,24 @@ export function VideoPlayer({
   src,
   poster,
   title,
+  movieId,
+  episodeId,
   episodeNumber,
+  initialTime = 0,
   hasNextEpisode = false,
   onNextEpisode,
   isCinemaMode = false,
   onToggleCinemaMode,
   onViewCount,
+  onProgressUpdate,
 }) {
   const videoRef = useRef(null);
   const playerRef = useRef(null);
   const viewRecordedRef = useRef(false);
+  const lastSaveTimeRef = useRef(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [resumePrompt, setResumePrompt] = useState(null);
 
   // Helper function to detect MIME type from URL
   const getVideoType = (url) => {
@@ -31,6 +37,43 @@ export function VideoPlayer({
     if (url.includes(".webm")) return "video/webm";
     if (url.includes(".ogg")) return "video/ogg";
     return "video/mp4";
+  };
+
+  // Helper to save watch progress to localStorage
+  const saveProgress = (currentTime, duration) => {
+    if (!movieId || !currentTime || currentTime < 3) return;
+    try {
+      const historyKey = "filmweb_watch_history";
+      const raw = localStorage.getItem(historyKey);
+      let list = raw ? JSON.parse(raw) : [];
+
+      // Remove existing item for this movie if any
+      list = list.filter((item) => item.movieId !== movieId);
+
+      const percent = duration > 0 ? Math.min(100, Math.round((currentTime / duration) * 100)) : 0;
+
+      list.unshift({
+        movieId,
+        title,
+        poster,
+        episodeId,
+        episodeNumber: episodeNumber || 1,
+        currentTime: Math.floor(currentTime),
+        duration: Math.floor(duration || 0),
+        percent,
+        updatedAt: new Date().toISOString(),
+      });
+
+      // Keep max 20 recent items
+      if (list.length > 20) list = list.slice(0, 20);
+      localStorage.setItem(historyKey, JSON.stringify(list));
+
+      if (onProgressUpdate) {
+        onProgressUpdate({ currentTime, duration, percent });
+      }
+    } catch (e) {
+      console.warn("Lỗi lưu tiến trình xem:", e);
+    }
   };
 
   // Initialize Video.js Player on mount
@@ -79,26 +122,51 @@ export function VideoPlayer({
     try {
       player = playerRef.current = videojs(videoElement, playerOptions, () => {
         setLoadError(null);
+        // Seek to initialTime if provided and > 5s
+        if (initialTime && initialTime > 5) {
+          player.currentTime(initialTime);
+          const mins = Math.floor(initialTime / 60);
+          const secs = Math.floor(initialTime % 60);
+          setResumePrompt(`Đã tiếp tục xem từ ${mins}:${secs < 10 ? "0" : ""}${secs}`);
+          setTimeout(() => setResumePrompt(null), 4000);
+        }
       });
 
       // Event listeners
       player.on("play", () => setIsPlaying(true));
-      player.on("pause", () => setIsPlaying(false));
+      player.on("pause", () => {
+        setIsPlaying(false);
+        saveProgress(player.currentTime(), player.duration());
+      });
+
       player.on("timeupdate", () => {
+        const curTime = player.currentTime() || 0;
+        const dur = player.duration() || 0;
+
         // Tự động ghi nhận lượt xem khi người dùng xem từ 5 giây trở lên
-        if (!viewRecordedRef.current && player.currentTime() >= 5) {
+        if (!viewRecordedRef.current && curTime >= 5) {
           viewRecordedRef.current = true;
           if (onViewCount) {
             onViewCount();
           }
         }
+
+        // Save progress every 5 seconds
+        if (Math.abs(curTime - lastSaveTimeRef.current) >= 5) {
+          lastSaveTimeRef.current = curTime;
+          saveProgress(curTime, dur);
+        }
       });
+
       player.on("ended", () => {
         setIsPlaying(false);
+        // When movie finishes, mark 100% or clear
+        saveProgress(player.duration(), player.duration());
         if (hasNextEpisode && onNextEpisode) {
           onNextEpisode();
         }
       });
+
       player.on("error", () => {
         const err = player.error();
         console.warn("Video.js playback error:", err);
@@ -109,10 +177,20 @@ export function VideoPlayer({
       setLoadError("Không thể khởi tạo trình phát video: " + err.message);
     }
 
+    // Save on beforeunload
+    const handleBeforeUnload = () => {
+      if (playerRef.current && !playerRef.current.isDisposed()) {
+        saveProgress(playerRef.current.currentTime(), playerRef.current.duration());
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     // Cleanup on unmount
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       if (player && !player.isDisposed()) {
         try {
+          saveProgress(player.currentTime(), player.duration());
           player.dispose();
         } catch (e) {
           console.warn("Lỗi khi dispose player:", e);
@@ -127,6 +205,7 @@ export function VideoPlayer({
     const player = playerRef.current;
     if (player && !player.isDisposed() && src) {
       viewRecordedRef.current = false;
+      lastSaveTimeRef.current = 0;
       setLoadError(null);
       const type = getVideoType(src);
       player.pause();
@@ -135,8 +214,19 @@ export function VideoPlayer({
         player.poster(poster);
       }
       player.load();
+
+      // Check if there's an initial seek time passed
+      if (initialTime && initialTime > 5) {
+        player.one("loadedmetadata", () => {
+          player.currentTime(initialTime);
+          const mins = Math.floor(initialTime / 60);
+          const secs = Math.floor(initialTime % 60);
+          setResumePrompt(`Đã tiếp tục xem từ ${mins}:${secs < 10 ? "0" : ""}${secs}`);
+          setTimeout(() => setResumePrompt(null), 4000);
+        });
+      }
     }
-  }, [src, poster]);
+  }, [src, poster, episodeId]);
 
   // Fast forward / Rewind 10 seconds
   const handleSeek = (seconds) => {
@@ -212,6 +302,14 @@ export function VideoPlayer({
       <div data-vjs-player className="w-full">
         <div ref={videoRef} />
       </div>
+
+      {/* Thông báo tiếp tục xem */}
+      {resumePrompt && (
+        <div className="absolute top-16 left-6 z-30 bg-black/80 backdrop-blur-md border border-amber-500/40 text-amber-300 px-4 py-2 rounded-xl text-xs font-semibold shadow-xl flex items-center gap-2 animate-fade-in pointer-events-none">
+          <span>⏱️</span>
+          <span>{resumePrompt}</span>
+        </div>
+      )}
 
       {/* Thông báo lỗi phát video nếu có */}
       {loadError && (
